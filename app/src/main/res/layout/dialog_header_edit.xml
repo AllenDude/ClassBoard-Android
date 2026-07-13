@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <EditText
+        android:id="@+id/semInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Semester (e.g. 2nd Sem, SY 2026\u20132027)" />
+
+    <EditText
+        android:id="@+id/progInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:hint="Program (e.g. BSIT, Networking)" />
+
+</LinearLayout>
