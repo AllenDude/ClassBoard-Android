@@ -17,7 +17,7 @@ object NotificationHelper {
                 "Class reminders",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Reminders before each class starts"
+                description = "Reminders before and during each class"
                 enableVibration(true)
             }
             val manager = context.getSystemService(NotificationManager::class.java)
@@ -25,21 +25,29 @@ object NotificationHelper {
         }
     }
 
-    fun show(context: Context, notificationId: Int, title: String, body: String) {
+    /** Shows (or updates, if the same notificationId is reused) a
+     *  reminder. `ongoing = true` makes it a sticky notification the
+     *  person can't swipe away — used while a class is upcoming or in
+     *  progress — call [cancel] once the class actually ends. */
+    fun show(context: Context, notificationId: Int, title: String, body: String, ongoing: Boolean) {
         ensureChannel(context)
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle(title)
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setAutoCancel(true)
+            .setOngoing(ongoing)
+            .setAutoCancel(!ongoing)
+            .setOnlyAlertOnce(true)
             .build()
 
-        // If notification permission was somehow revoked, this will
-        // simply no-op rather than crash.
         try {
             NotificationManagerCompat.from(context).notify(notificationId, notification)
         } catch (_: SecurityException) {
         }
+    }
+
+    fun cancel(context: Context, notificationId: Int) {
+        NotificationManagerCompat.from(context).cancel(notificationId)
     }
 }

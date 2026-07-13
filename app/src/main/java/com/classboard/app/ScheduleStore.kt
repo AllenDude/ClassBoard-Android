@@ -13,6 +13,7 @@ object ScheduleStore {
     private const val KEY_SCHEDULE = "schedule_json"
     private const val KEY_LEAD_MINUTES = "lead_minutes"
     private const val KEY_SEMESTER = "semester_label"
+    private const val KEY_PROGRAM = "program_label"
 
     fun getSchedule(context: Context): MutableList<ScheduleEntry> {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -55,6 +56,15 @@ object ScheduleStore {
     fun setSemesterLabel(context: Context, label: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(KEY_SEMESTER, label).apply()
+    }
+
+    fun getProgramLabel(context: Context): String =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_PROGRAM, "Add your program in Settings ›") ?: "Add your program in Settings ›"
+
+    fun setProgramLabel(context: Context, label: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString(KEY_PROGRAM, label).apply()
     }
 
     /** The next real moment (as a Calendar) this class meeting happens,

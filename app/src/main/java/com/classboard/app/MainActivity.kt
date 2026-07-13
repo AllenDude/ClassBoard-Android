@@ -4,6 +4,7 @@ import android.app.AlarmManager
 import android.app.AlertDialog
 import android.app.TimePickerDialog
 import android.content.Intent
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -17,6 +18,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import java.util.Calendar
 import java.util.UUID
 
 class MainActivity : AppCompatActivity() {
@@ -24,6 +26,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var adapter: EntryAdapter
     private val dayNames = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
     private val leadOptions = listOf(5, 10, 15, 30, 60)
+    private var currentThemeKey: String = "default"
 
     private val notifPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -40,17 +43,32 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        currentThemeKey = Themes.getSaved(this)
+
         val semesterLabel = findViewById<TextView>(R.id.semesterLabel)
-        semesterLabel.text = "${ScheduleStore.getSemesterLabel(this)} · BSCS, Data Mining"
+        fun refreshHeader() {
+            semesterLabel.text = "${ScheduleStore.getSemesterLabel(this)} · ${ScheduleStore.getProgramLabel(this)}"
+        }
+        refreshHeader()
         semesterLabel.setOnClickListener {
-            val input = EditText(this).apply { setText(ScheduleStore.getSemesterLabel(this@MainActivity)) }
+            val dialogView = layoutInflater.inflate(R.layout.dialog_header_edit, null)
+            val semInput = dialogView.findViewById<EditText>(R.id.semInput)
+            val progInput = dialogView.findViewById<EditText>(R.id.progInput)
+            semInput.setText(ScheduleStore.getSemesterLabel(this))
+            progInput.setText(
+                ScheduleStore.getProgramLabel(this).let {
+                    if (it.startsWith("Add your program")) "" else it
+                }
+            )
             AlertDialog.Builder(this)
-                .setTitle("Semester label")
-                .setView(input)
+                .setTitle("Your details")
+                .setView(dialogView)
                 .setPositiveButton("Save") { _, _ ->
-                    val label = input.text.toString().trim().ifEmpty { "1st Sem" }
-                    ScheduleStore.setSemesterLabel(this, label)
-                    semesterLabel.text = "$label · BSCS, Data Mining"
+                    val sem = semInput.text.toString().trim().ifEmpty { "1st Sem" }
+                    val prog = progInput.text.toString().trim().ifEmpty { "Add your program in Settings ›" }
+                    ScheduleStore.setSemesterLabel(this, sem)
+                    ScheduleStore.setProgramLabel(this, prog)
+                    refreshHeader()
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
@@ -60,12 +78,14 @@ class MainActivity : AppCompatActivity() {
         recyclerView.layoutManager = LinearLayoutManager(this)
         adapter = EntryAdapter(
             ScheduleStore.getSchedule(this).sortedWith(compareBy({ it.day }, { it.start })),
+            Themes.all.getValue(currentThemeKey),
             onEdit = { showEntryDialog(it) },
             onDelete = { deleteEntry(it) }
         )
         recyclerView.adapter = adapter
 
         setupLeadSpinner()
+        setupThemeSpinner()
 
         findViewById<android.widget.Button>(R.id.enableBtn).setOnClickListener {
             requestNotificationsAndAlarms()
@@ -75,12 +95,98 @@ class MainActivity : AppCompatActivity() {
             showEntryDialog(null)
         }
 
+        applyTheme(currentThemeKey)
         updateStatusLine()
+        updateNextUp()
     }
 
     override fun onResume() {
         super.onResume()
         updateStatusLine()
+        updateNextUp()
+    }
+
+    // ---------------- Theming ----------------
+
+    private fun setupThemeSpinner() {
+        val spinner = findViewById<Spinner>(R.id.themeSpinner)
+        val keys = Themes.all.keys.toList()
+        val labels = keys.map { Themes.labels[it] ?: it }
+        spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
+        val index = keys.indexOf(currentThemeKey).takeIf { it >= 0 } ?: 0
+        spinner.setSelection(index)
+        spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                val key = keys[position]
+                if (key != currentThemeKey) {
+                    currentThemeKey = key
+                    Themes.save(this@MainActivity, key)
+                    applyTheme(key)
+                }
+            }
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+        }
+    }
+
+    private fun rounded(colorInt: Int, radiusDp: Float, strokeColor: Int? = null): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = radiusDp * resources.displayMetrics.density
+            setColor(colorInt)
+            strokeColor?.let { setStroke((1.5f * resources.displayMetrics.density).toInt(), it) }
+        }
+    }
+
+    private fun applyTheme(key: String) {
+        val t = Themes.all.getValue(key)
+
+        findViewById<android.view.View>(R.id.rootLayout).setBackgroundColor(t.bg)
+        findViewById<android.view.View>(R.id.boardCard).background = rounded(t.panel2, 10f, t.accent)
+        findViewById<TextView>(R.id.titleText).setTextColor(t.accent)
+        findViewById<TextView>(R.id.semesterLabel).setTextColor(t.slate)
+        findViewById<TextView>(R.id.nextUpText).setTextColor(t.ink)
+        findViewById<TextView>(R.id.statusLine).setTextColor(t.slate)
+
+        val enableBtn = findViewById<android.widget.Button>(R.id.enableBtn)
+        enableBtn.background = rounded(t.accent, 8f)
+        enableBtn.setTextColor(t.accentText)
+
+        val addBtn = findViewById<android.widget.Button>(R.id.addBtn)
+        addBtn.background = rounded(t.panel, 8f)
+        addBtn.setTextColor(t.ink)
+
+        adapter.updateTheme(t)
+    }
+
+    // ---------------- Next up ----------------
+
+    private fun updateNextUp() {
+        val schedule = ScheduleStore.getSchedule(this)
+        if (schedule.isEmpty()) {
+            findViewById<TextView>(R.id.nextUpText).text = "Next up: add a class below \u2193"
+            return
+        }
+        var soonestEntry: ScheduleEntry? = null
+        var soonestTime: Calendar? = null
+        schedule.forEach { entry ->
+            val at = ScheduleStore.nextOccurrence(entry)
+            if (soonestTime == null || at.before(soonestTime)) {
+                soonestTime = at
+                soonestEntry = entry
+            }
+        }
+        val entry = soonestEntry ?: return
+        val at = soonestTime ?: return
+        val dayLabel = dayNames[entry.day]
+        findViewById<TextView>(R.id.nextUpText).text =
+            "Next up: ${entry.subject} \u00b7 $dayLabel ${fmt12(entry.start)}"
+    }
+
+    private fun fmt12(hhmm: String): String {
+        val (h, m) = hhmm.split(":").map { it.toInt() }
+        val period = if (h >= 12) "PM" else "AM"
+        val hour12 = if (h % 12 == 0) 12 else h % 12
+        return String.format("%d:%02d %s", hour12, m, period)
     }
 
     // ---------------- Lead time ----------------
@@ -140,7 +246,7 @@ class MainActivity : AppCompatActivity() {
         } else true
 
         statusLine.text = when {
-            notifsEnabled && exactOk -> "Notifications: enabled — reminders are scheduled with the OS directly"
+            notifsEnabled && exactOk -> "Notifications: enabled \u2014 reminders are scheduled with the OS directly"
             notifsEnabled && !exactOk -> "Notifications: on, but exact-alarm permission is still needed"
             else -> "Notifications: not enabled yet"
         }
@@ -221,6 +327,7 @@ class MainActivity : AppCompatActivity() {
         ScheduleStore.saveSchedule(this, list)
         AlarmScheduler.scheduleOne(this, entry)
         refreshList()
+        updateNextUp()
     }
 
     private fun deleteEntry(entry: ScheduleEntry) {
@@ -229,6 +336,7 @@ class MainActivity : AppCompatActivity() {
         list.removeAll { it.id == entry.id }
         ScheduleStore.saveSchedule(this, list)
         refreshList()
+        updateNextUp()
     }
 
     private fun refreshList() {
