@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/rootLayout"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/scrollRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     android:background="#12151C"
+    android:fillViewport="true">
+
+<LinearLayout
+    android:id="@+id/rootLayout"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
     android:padding="16dp">
 
     <LinearLayout
@@ -35,14 +41,27 @@
             android:textSize="12sp" />
 
         <TextView
-            android:id="@+id/nextUpText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="Next up: —"
-            android:textColor="#EEF0F3"
+            android:layout_marginTop="12dp"
+            android:text="NEXT UP"
+            android:textColor="#7A8699"
             android:fontFamily="monospace"
-            android:textSize="13sp" />
+            android:textSize="10sp"
+            android:letterSpacing="0.15" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/nextUpFlapRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
 
     </LinearLayout>
 
@@ -79,25 +98,92 @@
         android:id="@+id/statusLine"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="14dp"
+        android:layout_marginBottom="16dp"
         android:text="Notifications: not enabled yet"
         android:textColor="#7A8699"
         android:fontFamily="monospace"
         android:textSize="12sp" />
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/entryList"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
+    <!-- Manage schedule (collapsible) -->
 
     <Button
-        android:id="@+id/addBtn"
+        android:id="@+id/manageToggleBtn"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:text="Add a class"
-        android:backgroundTint="#242A37"
-        android:textColor="#EEF0F3" />
+        android:text="Manage schedule ▾"
+        android:backgroundTint="#1C212B"
+        android:textColor="#EEF0F3"
+        android:layout_marginBottom="8dp" />
+
+    <LinearLayout
+        android:id="@+id/manageBody"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:layout_marginBottom="16dp">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/entryList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <Button
+            android:id="@+id/addBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="Add a class"
+            android:backgroundTint="#242A37"
+            android:textColor="#EEF0F3" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="8dp">
+
+            <Button
+                android:id="@+id/exportBtn"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Export backup"
+                android:textSize="12sp"
+                android:backgroundTint="#242A37"
+                android:textColor="#EEF0F3" />
+
+            <Button
+                android:id="@+id/importBtn"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="Import backup"
+                android:textSize="12sp"
+                android:backgroundTint="#242A37"
+                android:textColor="#EEF0F3" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/resetBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Reset to sample schedule"
+            android:textSize="12sp"
+            android:backgroundTint="#242A37"
+            android:textColor="#FF6B6B" />
+
+    </LinearLayout>
+
+    <!-- Read-only week-at-a-glance, always visible -->
+
+    <LinearLayout
+        android:id="@+id/weekListContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
 
 </LinearLayout>
+</ScrollView>
