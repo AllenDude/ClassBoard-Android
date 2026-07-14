@@ -17,6 +17,13 @@
          actually reschedule everything right after boot completes. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Lets the app run a real foreground service while a class is
+         upcoming/ongoing, which is the only Android mechanism that
+         guarantees a notification truly can't be swiped away, in the
+         shade or on the lock screen. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -44,6 +51,15 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
+        <service
+            android:name=".ClassForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Shows a persistent reminder before and during a scheduled class" />
+        </service>
 
     </application>
 </manifest>
