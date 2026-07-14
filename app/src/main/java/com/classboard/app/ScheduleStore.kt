@@ -91,6 +91,45 @@ object ScheduleStore {
         return fallback
     }
 
+    /** Builds a backup file's contents — same shape the web version
+     *  exports, so a backup made on either the website or this app
+     *  can be imported into the other. */
+    fun exportBackupJson(context: Context): String {
+        val obj = org.json.JSONObject()
+        obj.put("semester", getSemesterLabel(context))
+        obj.put("program", getProgramLabel(context))
+        val arr = JSONArray()
+        getSchedule(context).forEach { arr.put(it.toJson()) }
+        obj.put("schedule", arr)
+        obj.put("exportedAt", java.time.Instant.now().toString())
+        return obj.toString(2)
+    }
+
+    /** Returns true on success. Accepts a backup exported from either
+     *  this app or the web version. */
+    fun importBackupJson(context: Context, json: String): Boolean {
+        return try {
+            val obj = org.json.JSONObject(json)
+            val arr = obj.optJSONArray("schedule") ?: return false
+            val list = mutableListOf<ScheduleEntry>()
+            for (i in 0 until arr.length()) {
+                list.add(ScheduleEntry.fromJson(arr.getJSONObject(i)))
+            }
+            saveSchedule(context, list)
+            val sem = obj.optString("semester", "")
+            if (sem.isNotBlank()) setSemesterLabel(context, sem)
+            val prog = obj.optString("program", "")
+            if (prog.isNotBlank()) setProgramLabel(context, prog)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun resetToDefault(context: Context) {
+        saveSchedule(context, defaultSchedule())
+    }
+
     private fun defaultSchedule(): List<ScheduleEntry> = listOf(
         ScheduleEntry("d1", "Purposive Communication", "R3", "Lopez, Rizza Mae Carlos", 1, "10:00", "11:30"),
         ScheduleEntry("d2", "Purposive Communication", "R3", "Lopez, Rizza Mae Carlos", 5, "10:00", "11:30"),

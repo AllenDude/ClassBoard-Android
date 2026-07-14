@@ -25,6 +25,21 @@ object NotificationHelper {
         }
     }
 
+    /** Builds the Notification object directly, for use with
+     *  Service.startForeground(), which needs the raw object rather
+     *  than something already posted via the NotificationManager. */
+    fun build(context: Context, title: String, body: String): android.app.Notification {
+        ensureChannel(context)
+        return NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .build()
+    }
+
     /** Shows (or updates, if the same notificationId is reused) a
      *  reminder. `ongoing = true` makes it a sticky notification the
      *  person can't swipe away — used while a class is upcoming or in
