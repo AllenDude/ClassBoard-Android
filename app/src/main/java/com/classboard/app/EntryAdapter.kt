@@ -20,8 +20,8 @@ class EntryAdapter(
         val root: View = view.findViewById(R.id.itemRoot)
         val subjectText: TextView = view.findViewById(R.id.subjectText)
         val metaText: TextView = view.findViewById(R.id.metaText)
-        val editBtn: View = view.findViewById(R.id.editBtn)
-        val deleteBtn: View = view.findViewById(R.id.deleteBtn)
+        val editBtn: android.widget.Button = view.findViewById(R.id.editBtn)
+        val deleteBtn: android.widget.Button = view.findViewById(R.id.deleteBtn)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -44,6 +44,21 @@ class EntryAdapter(
             setColor(theme.panel)
         }
         holder.root.background = bg
+
+        val pillRadius = 6f * holder.root.resources.displayMetrics.density
+        holder.editBtn.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = pillRadius
+            setColor(theme.panel2)
+        }
+        holder.editBtn.setTextColor(theme.accent)
+
+        holder.deleteBtn.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = pillRadius
+            setColor(theme.panel2)
+        }
+        holder.deleteBtn.setTextColor(0xFFFF6B6B.toInt())
 
         holder.editBtn.setOnClickListener { onEdit(entry) }
         holder.deleteBtn.setOnClickListener { onDelete(entry) }

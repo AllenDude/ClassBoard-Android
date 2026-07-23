@@ -36,6 +36,16 @@ object Themes {
         "neon_pastel" to "Neon Pastel"
     )
 
+    val dialogStyle: Map<String, Int> = linkedMapOf(
+        "default" to R.style.Dialog_Default,
+        "blue" to R.style.Dialog_Blue,
+        "blue_pastel" to R.style.Dialog_BluePastel,
+        "pink" to R.style.Dialog_Pink,
+        "pink_pastel" to R.style.Dialog_PinkPastel,
+        "neon" to R.style.Dialog_Neon,
+        "neon_pastel" to R.style.Dialog_NeonPastel
+    )
+
     fun getSaved(context: Context): String =
         context.getSharedPreferences(KEY, Context.MODE_PRIVATE).getString(THEME_KEY, "default") ?: "default"
 

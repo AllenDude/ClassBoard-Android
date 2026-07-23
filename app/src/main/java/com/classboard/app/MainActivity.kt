@@ -96,6 +96,8 @@ class MainActivity : AppCompatActivity() {
         setupLeadSpinner()
         setupThemeSpinner()
         setupManageToggle()
+        setupBottomNav()
+        setupTodoTab()
 
         findViewById<android.widget.Button>(R.id.enableBtn).setOnClickListener {
             requestNotificationsAndAlarms()
@@ -111,7 +113,7 @@ class MainActivity : AppCompatActivity() {
             importLauncher.launch(arrayOf("application/json"))
         }
         findViewById<android.widget.Button>(R.id.resetBtn).setOnClickListener {
-            AlertDialog.Builder(this)
+            AlertDialog.Builder(themedContext())
                 .setTitle("Reset schedule?")
                 .setMessage("This replaces your current classes with the original sample schedule.")
                 .setPositiveButton("Reset") { _, _ ->
@@ -137,6 +139,7 @@ class MainActivity : AppCompatActivity() {
         refreshList()
         updateNextUp()
         updateWeekList()
+        updateTodoList()
     }
 
     // ---------------- Header (semester / program) ----------------
@@ -148,14 +151,14 @@ class MainActivity : AppCompatActivity() {
         }
         refreshHeader()
         semesterLabel.setOnClickListener {
-            val dialogView = layoutInflater.inflate(R.layout.dialog_header_edit, null)
+            val dialogView = android.view.LayoutInflater.from(themedContext()).inflate(R.layout.dialog_header_edit, null)
             val semInput = dialogView.findViewById<EditText>(R.id.semInput)
             val progInput = dialogView.findViewById<EditText>(R.id.progInput)
             semInput.setText(ScheduleStore.getSemesterLabel(this))
             progInput.setText(
                 ScheduleStore.getProgramLabel(this).let { if (it.startsWith("Add your program")) "" else it }
             )
-            AlertDialog.Builder(this)
+            AlertDialog.Builder(themedContext())
                 .setTitle("Your details")
                 .setView(dialogView)
                 .setPositiveButton("Save") { _, _ ->
@@ -182,6 +185,143 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ---------------- Bottom nav (tab switching) ----------------
+
+    private fun setupBottomNav() {
+        val bottomNav = findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.bottomNav)
+        val scheduleScroll = findViewById<View>(R.id.scheduleScroll)
+        val todoScroll = findViewById<View>(R.id.todoScroll)
+
+        bottomNav.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_schedule -> {
+                    scheduleScroll.visibility = View.VISIBLE
+                    todoScroll.visibility = View.GONE
+                    true
+                }
+                R.id.nav_todo -> {
+                    scheduleScroll.visibility = View.GONE
+                    todoScroll.visibility = View.VISIBLE
+                    updateTodoList()
+                    true
+                }
+                else -> false
+            }
+        }
+    }
+
+    // ---------------- To-Do tab ----------------
+
+    private fun setupTodoTab() {
+        findViewById<android.widget.Button>(R.id.addTodoBtn).setOnClickListener {
+            showAddTodoDialog()
+        }
+    }
+
+    private fun showAddTodoDialog() {
+        val subjects = ScheduleStore.getSchedule(this).map { it.subject }.distinct()
+        if (subjects.isEmpty()) {
+            Toast.makeText(this, "Add a class to your schedule first.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val options = listOf("Any next class") + subjects
+
+        val view = android.view.LayoutInflater.from(themedContext()).inflate(R.layout.dialog_add_todo, null)
+        val textInput = view.findViewById<EditText>(R.id.todoTextInput)
+        val dueSpinner = view.findViewById<Spinner>(R.id.todoDueSpinner)
+        dueSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, options)
+
+        AlertDialog.Builder(themedContext())
+            .setTitle("Add a to-do")
+            .setView(view)
+            .setPositiveButton("Add") { _, _ ->
+                val text = textInput.text.toString().trim()
+                if (text.isEmpty()) {
+                    Toast.makeText(this, "Task can't be empty.", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                val position = dueSpinner.selectedItemPosition
+                val item = if (position == 0) {
+                    TodoItem(id = UUID.randomUUID().toString(), text = text, dueMode = "ANY", subjectName = null)
+                } else {
+                    TodoItem(id = UUID.randomUUID().toString(), text = text, dueMode = "SUBJECT", subjectName = subjects[position - 1])
+                }
+                TodoStore.addTodo(this, item)
+                updateTodoList()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun updateTodoList() {
+        val t = Themes.all.getValue(currentThemeKey)
+        val container = findViewById<LinearLayout>(R.id.todoListContainer)
+        val emptyText = findViewById<TextView>(R.id.todoEmptyText)
+        container.removeAllViews()
+
+        val items = TodoStore.pruneAndSort(this)
+        emptyText.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+
+        items.forEach { (item, deadline) ->
+            val row = layoutInflater.inflate(R.layout.item_todo, container, false)
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 8f * resources.displayMetrics.density
+                setColor(t.panel)
+            }
+            row.background = bg
+
+            val check = row.findViewById<android.widget.CheckBox>(R.id.todoCheck)
+            val textView = row.findViewById<TextView>(R.id.todoText)
+            val dueText = row.findViewById<TextView>(R.id.todoDueText)
+            val deleteBtn = row.findViewById<android.widget.Button>(R.id.todoDeleteBtn)
+
+            textView.text = item.text
+            textView.setTextColor(t.ink)
+            textView.paintFlags = if (item.completed) {
+                textView.paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
+            } else {
+                textView.paintFlags and android.graphics.Paint.STRIKE_THRU_TEXT_FLAG.inv()
+            }
+
+            val dueLabel = if (item.dueMode == "SUBJECT") "Due before ${item.subjectName}" else "Due before next class"
+            dueText.text = if (deadline != null) {
+                "$dueLabel · ${dayNames[deadline.get(Calendar.DAY_OF_WEEK) - 1]} ${fmt12HHmm(deadline)}"
+            } else {
+                dueLabel
+            }
+            dueText.setTextColor(t.slate)
+
+            check.setOnCheckedChangeListener(null)
+            check.isChecked = item.completed
+            check.setOnCheckedChangeListener { _, isChecked ->
+                TodoStore.setCompleted(this, item.id, isChecked)
+                updateTodoList()
+            }
+
+            deleteBtn.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 6f * resources.displayMetrics.density
+                setColor(t.panel2)
+            }
+            deleteBtn.setTextColor(0xFFFF6B6B.toInt())
+            deleteBtn.setOnClickListener {
+                TodoStore.deleteTodo(this, item.id)
+                updateTodoList()
+            }
+
+            container.addView(row)
+        }
+    }
+
+    private fun fmt12HHmm(cal: Calendar): String {
+        val h = cal.get(Calendar.HOUR_OF_DAY)
+        val m = cal.get(Calendar.MINUTE)
+        val period = if (h >= 12) "PM" else "AM"
+        val hour12 = if (h % 12 == 0) 12 else h % 12
+        return String.format("%d:%02d %s", hour12, m, period)
+    }
+
     // ---------------- Theming ----------------
 
     private fun setupThemeSpinner() {
@@ -204,6 +344,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Wraps the activity in the current theme's dialog style, so any
+     *  AlertDialog (and anything inflated with its LayoutInflater)
+     *  actually matches the selected theme instead of looking like
+     *  the system default. */
+    private fun themedContext(): android.content.Context {
+        val styleRes = Themes.dialogStyle[currentThemeKey] ?: R.style.Dialog_Default
+        return androidx.appcompat.view.ContextThemeWrapper(this, styleRes)
+    }
+
     private fun rounded(colorInt: Int, radiusDp: Float, strokeColor: Int? = null): GradientDrawable {
         return GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
@@ -216,8 +365,10 @@ class MainActivity : AppCompatActivity() {
     private fun applyTheme(key: String) {
         val t = Themes.all.getValue(key)
 
+        findViewById<View>(R.id.outerRoot).setBackgroundColor(t.bg)
+        findViewById<View>(R.id.scheduleScroll).setBackgroundColor(t.bg)
+        findViewById<View>(R.id.todoScroll).setBackgroundColor(t.bg)
         findViewById<View>(R.id.rootLayout).setBackgroundColor(t.bg)
-        findViewById<View>(R.id.scrollRoot).setBackgroundColor(t.bg)
         findViewById<View>(R.id.boardCard).background = rounded(t.panel2, 10f, t.accent)
         findViewById<TextView>(R.id.titleText).setTextColor(t.accent)
         findViewById<TextView>(R.id.semesterLabel).setTextColor(t.slate)
@@ -246,9 +397,28 @@ class MainActivity : AppCompatActivity() {
         val resetBtn = findViewById<android.widget.Button>(R.id.resetBtn)
         resetBtn.background = rounded(t.panel, 8f)
 
+        // To-Do tab
+        findViewById<TextView>(R.id.todoTitleText).setTextColor(t.accent)
+        findViewById<TextView>(R.id.todoSubText).setTextColor(t.slate)
+        findViewById<TextView>(R.id.todoEmptyText).setTextColor(t.slate)
+        val addTodoBtn = findViewById<android.widget.Button>(R.id.addTodoBtn)
+        addTodoBtn.background = rounded(t.accent, 8f)
+        addTodoBtn.setTextColor(t.accentText)
+
+        // Bottom navigation
+        val bottomNav = findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.bottomNav)
+        bottomNav.setBackgroundColor(t.panel)
+        val navColors = android.content.res.ColorStateList(
+            arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf(-android.R.attr.state_checked)),
+            intArrayOf(t.accent, t.slate)
+        )
+        bottomNav.itemIconTintList = navColors
+        bottomNav.itemTextColor = navColors
+
         adapter.updateTheme(t)
         updateNextUp()
         updateWeekList()
+        updateTodoList()
     }
 
     // ---------------- Next up (flap row) ----------------
@@ -424,7 +594,7 @@ class MainActivity : AppCompatActivity() {
     // ---------------- Add / edit / delete ----------------
 
     private fun showEntryDialog(existing: ScheduleEntry?) {
-        val view = layoutInflater.inflate(R.layout.dialog_add_entry, null)
+        val view = android.view.LayoutInflater.from(themedContext()).inflate(R.layout.dialog_add_entry, null)
         val subjectInput = view.findViewById<EditText>(R.id.subjectInput)
         val roomInput = view.findViewById<EditText>(R.id.roomInput)
         val teacherInput = view.findViewById<EditText>(R.id.teacherInput)
@@ -465,7 +635,7 @@ class MainActivity : AppCompatActivity() {
             daySpinner.setSelection(it.day)
         }
 
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(themedContext())
             .setTitle(if (existing == null) "Add a class" else "Edit class")
             .setView(view)
             .setPositiveButton("Save") { _, _ ->
