@@ -1,189 +1,275 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/scrollRoot"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/outerRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#12151C"
-    android:fillViewport="true">
-
-<LinearLayout
-    android:id="@+id/rootLayout"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:background="#12151C">
 
-    <LinearLayout
-        android:id="@+id/boardCard"
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="14dp"
-        android:layout_marginBottom="14dp">
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
-        <TextView
-            android:id="@+id/titleText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="CLASS BOARD"
-            android:textColor="#FFB020"
-            android:textStyle="bold"
-            android:textSize="20sp"
-            android:fontFamily="monospace" />
-
-        <TextView
-            android:id="@+id/semesterLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="1st Sem"
-            android:textColor="#7A8699"
-            android:textSize="12sp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="NEXT UP"
-            android:textColor="#7A8699"
-            android:fontFamily="monospace"
-            android:textSize="10sp"
-            android:letterSpacing="0.15" />
-
-        <HorizontalScrollView
+        <!-- ===================== SCHEDULE TAB ===================== -->
+        <ScrollView
+            android:id="@+id/scheduleScroll"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:scrollbars="none">
-
-            <LinearLayout
-                android:id="@+id/nextUpFlapRow"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal" />
-        </HorizontalScrollView>
-
-    </LinearLayout>
-
-    <Button
-        android:id="@+id/enableBtn"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Enable notifications"
-        android:backgroundTint="#FFB020"
-        android:textColor="#1A1400"
-        android:layout_marginBottom="8dp" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="10dp">
-
-        <Spinner
-            android:id="@+id/leadSpinner"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1" />
-
-        <Spinner
-            android:id="@+id/themeSpinner"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginStart="8dp" />
-    </LinearLayout>
-
-    <TextView
-        android:id="@+id/statusLine"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
-        android:text="Notifications: not enabled yet"
-        android:textColor="#7A8699"
-        android:fontFamily="monospace"
-        android:textSize="12sp" />
-
-    <!-- Manage schedule (collapsible) -->
-
-    <Button
-        android:id="@+id/manageToggleBtn"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Manage schedule ▾"
-        android:backgroundTint="#1C212B"
-        android:textColor="#EEF0F3"
-        android:layout_marginBottom="8dp" />
-
-    <LinearLayout
-        android:id="@+id/manageBody"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:visibility="gone"
-        android:layout_marginBottom="16dp">
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/entryList"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-        <Button
-            android:id="@+id/addBtn"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="Add a class"
-            android:backgroundTint="#242A37"
-            android:textColor="#EEF0F3" />
+            android:layout_height="match_parent"
+            android:fillViewport="true">
 
         <LinearLayout
+            android:id="@+id/rootLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="8dp">
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:id="@+id/boardCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="14dp"
+                android:layout_marginBottom="14dp">
+
+                <TextView
+                    android:id="@+id/titleText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="CLASS BOARD"
+                    android:textColor="#FFB020"
+                    android:textStyle="bold"
+                    android:textSize="20sp"
+                    android:fontFamily="monospace" />
+
+                <TextView
+                    android:id="@+id/semesterLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="1st Sem"
+                    android:textColor="#7A8699"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="NEXT UP"
+                    android:textColor="#7A8699"
+                    android:fontFamily="monospace"
+                    android:textSize="10sp"
+                    android:letterSpacing="0.15" />
+
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/nextUpFlapRow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
+
+            </LinearLayout>
 
             <Button
-                android:id="@+id/exportBtn"
-                android:layout_width="0dp"
+                android:id="@+id/enableBtn"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Export backup"
-                android:textSize="12sp"
-                android:backgroundTint="#242A37"
-                android:textColor="#EEF0F3" />
+                android:text="Enable notifications"
+                android:backgroundTint="#FFB020"
+                android:textColor="#1A1400"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="10dp">
+
+                <Spinner
+                    android:id="@+id/leadSpinner"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+
+                <Spinner
+                    android:id="@+id/themeSpinner"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/statusLine"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:text="Notifications: not enabled yet"
+                android:textColor="#7A8699"
+                android:fontFamily="monospace"
+                android:textSize="12sp" />
+
+            <!-- Manage schedule (collapsible) -->
 
             <Button
-                android:id="@+id/importBtn"
-                android:layout_width="0dp"
+                android:id="@+id/manageToggleBtn"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                android:text="Import backup"
-                android:textSize="12sp"
-                android:backgroundTint="#242A37"
-                android:textColor="#EEF0F3" />
+                android:text="Manage schedule ▾"
+                android:backgroundTint="#1C212B"
+                android:textColor="#EEF0F3"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:id="@+id/manageBody"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone"
+                android:layout_marginBottom="16dp">
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/entryList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <Button
+                    android:id="@+id/addBtn"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="Add a class"
+                    android:backgroundTint="#242A37"
+                    android:textColor="#EEF0F3" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="8dp">
+
+                    <Button
+                        android:id="@+id/exportBtn"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Export backup"
+                        android:textSize="12sp"
+                        android:backgroundTint="#242A37"
+                        android:textColor="#EEF0F3" />
+
+                    <Button
+                        android:id="@+id/importBtn"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        android:text="Import backup"
+                        android:textSize="12sp"
+                        android:backgroundTint="#242A37"
+                        android:textColor="#EEF0F3" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/resetBtn"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Reset to sample schedule"
+                    android:textSize="12sp"
+                    android:backgroundTint="#242A37"
+                    android:textColor="#FF6B6B" />
+
+            </LinearLayout>
+
+            <!-- Read-only week-at-a-glance, always visible -->
+
+            <LinearLayout
+                android:id="@+id/weekListContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
         </LinearLayout>
+        </ScrollView>
 
-        <Button
-            android:id="@+id/resetBtn"
+        <!-- ===================== TO-DO TAB ===================== -->
+        <ScrollView
+            android:id="@+id/todoScroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/todoRootLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Reset to sample schedule"
-            android:textSize="12sp"
-            android:backgroundTint="#242A37"
-            android:textColor="#FF6B6B" />
+            android:orientation="vertical"
+            android:padding="16dp">
 
-    </LinearLayout>
+            <TextView
+                android:id="@+id/todoTitleText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="TO-DO"
+                android:textColor="#FFB020"
+                android:textStyle="bold"
+                android:textSize="20sp"
+                android:fontFamily="monospace" />
 
-    <!-- Read-only week-at-a-glance, always visible -->
+            <TextView
+                android:id="@+id/todoSubText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:layout_marginBottom="16dp"
+                android:text="Tasks tied to your class schedule — due dates set themselves"
+                android:textColor="#7A8699"
+                android:textSize="12sp" />
 
-    <LinearLayout
-        android:id="@+id/weekListContainer"
+            <Button
+                android:id="@+id/addTodoBtn"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Add a to-do"
+                android:backgroundTint="#FFB020"
+                android:textColor="#1A1400"
+                android:layout_marginBottom="14dp" />
+
+            <LinearLayout
+                android:id="@+id/todoListContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <TextView
+                android:id="@+id/todoEmptyText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Nothing on your list right now."
+                android:textColor="#7A8699"
+                android:fontFamily="monospace"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+        </LinearLayout>
+        </ScrollView>
+
+    </FrameLayout>
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNav"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical" />
+        app:menu="@menu/bottom_nav_menu"
+        xmlns:app="http://schemas.android.com/apk/res-auto" />
 
 </LinearLayout>
-</ScrollView>
