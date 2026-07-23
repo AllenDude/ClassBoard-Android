@@ -3,4 +3,50 @@
         <item name="colorPrimary">@color/amber</item>
         <item name="android:windowBackground">@color/bg</item>
     </style>
+
+    <!-- One dialog style per theme, so Add/Edit class, semester/program,
+         and confirmation dialogs actually change color with the rest
+         of the app instead of staying the system default. -->
+
+    <style name="Dialog.Default" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
+        <item name="colorSurface">#1C212B</item>
+        <item name="colorOnSurface">#EEF0F3</item>
+        <item name="colorPrimary">#FFB020</item>
+    </style>
+
+    <style name="Dialog.Blue" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
+        <item name="colorSurface">#151F30</item>
+        <item name="colorOnSurface">#EAF2FB</item>
+        <item name="colorPrimary">#4DA3FF</item>
+    </style>
+
+    <style name="Dialog.BluePastel" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
+        <item name="colorSurface">#FFFFFF</item>
+        <item name="colorOnSurface">#2B3A52</item>
+        <item name="colorPrimary">#5B8DEF</item>
+    </style>
+
+    <style name="Dialog.Pink" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
+        <item name="colorSurface">#261420</item>
+        <item name="colorOnSurface">#FBEAF3</item>
+        <item name="colorPrimary">#FF5FA8</item>
+    </style>
+
+    <style name="Dialog.PinkPastel" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
+        <item name="colorSurface">#FFFFFF</item>
+        <item name="colorOnSurface">#4A2D3C</item>
+        <item name="colorPrimary">#EC6FA6</item>
+    </style>
+
+    <style name="Dialog.Neon" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
+        <item name="colorSurface">#0F1216</item>
+        <item name="colorOnSurface">#EAFFF2</item>
+        <item name="colorPrimary">#39FF8F</item>
+    </style>
+
+    <style name="Dialog.NeonPastel" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
+        <item name="colorSurface">#FFFFFF</item>
+        <item name="colorOnSurface">#3C2D52</item>
+        <item name="colorPrimary">#B06FF7</item>
+    </style>
 </resources>
