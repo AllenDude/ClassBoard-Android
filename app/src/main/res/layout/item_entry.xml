@@ -37,7 +37,6 @@
         android:layout_height="wrap_content"
         android:text="Edit"
         android:textSize="11sp"
-        android:backgroundTint="#4A3A1A"
         android:textColor="#FFB020" />
 
     <Button
@@ -47,7 +46,6 @@
         android:layout_marginStart="6dp"
         android:text="Delete"
         android:textSize="11sp"
-        android:backgroundTint="#4A2A2A"
         android:textColor="#FF6B6B" />
 
 </LinearLayout>

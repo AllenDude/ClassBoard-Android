@@ -82,7 +82,6 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Enable notifications"
-                android:backgroundTint="#FFB020"
                 android:textColor="#1A1400"
                 android:layout_marginBottom="8dp" />
 
@@ -123,7 +122,6 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Manage schedule ▾"
-                android:backgroundTint="#1C212B"
                 android:textColor="#EEF0F3"
                 android:layout_marginBottom="8dp" />
 
@@ -146,7 +144,6 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
                     android:text="Add a class"
-                    android:backgroundTint="#242A37"
                     android:textColor="#EEF0F3" />
 
                 <LinearLayout
@@ -162,7 +159,6 @@
                         android:layout_weight="1"
                         android:text="Export backup"
                         android:textSize="12sp"
-                        android:backgroundTint="#242A37"
                         android:textColor="#EEF0F3" />
 
                     <Button
@@ -173,7 +169,6 @@
                         android:layout_marginStart="8dp"
                         android:text="Import backup"
                         android:textSize="12sp"
-                        android:backgroundTint="#242A37"
                         android:textColor="#EEF0F3" />
                 </LinearLayout>
 
@@ -184,7 +179,6 @@
                     android:layout_marginTop="8dp"
                     android:text="Reset to sample schedule"
                     android:textSize="12sp"
-                    android:backgroundTint="#242A37"
                     android:textColor="#FF6B6B" />
 
             </LinearLayout>
@@ -240,7 +234,6 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Add a to-do"
-                android:backgroundTint="#FFB020"
                 android:textColor="#1A1400"
                 android:layout_marginBottom="14dp" />
 
