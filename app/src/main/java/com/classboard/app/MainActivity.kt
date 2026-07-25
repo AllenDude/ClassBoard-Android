@@ -231,6 +231,10 @@ class MainActivity : AppCompatActivity() {
         val dueSpinner = view.findViewById<Spinner>(R.id.todoDueSpinner)
         dueSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, options)
 
+        val weekSpinner = view.findViewById<Spinner>(R.id.todoWeekSpinner)
+        val weekOptions = listOf("This week", "Next week")
+        weekSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, weekOptions)
+
         AlertDialog.Builder(themedContext())
             .setTitle("Add a to-do")
             .setView(view)
@@ -241,10 +245,11 @@ class MainActivity : AppCompatActivity() {
                     return@setPositiveButton
                 }
                 val position = dueSpinner.selectedItemPosition
+                val weekOffset = weekSpinner.selectedItemPosition // 0 = this week, 1 = next week
                 val item = if (position == 0) {
-                    TodoItem(id = UUID.randomUUID().toString(), text = text, dueMode = "ANY", subjectName = null)
+                    TodoItem(id = UUID.randomUUID().toString(), text = text, dueMode = "ANY", subjectName = null, weekOffset = weekOffset)
                 } else {
-                    TodoItem(id = UUID.randomUUID().toString(), text = text, dueMode = "SUBJECT", subjectName = subjects[position - 1])
+                    TodoItem(id = UUID.randomUUID().toString(), text = text, dueMode = "SUBJECT", subjectName = subjects[position - 1], weekOffset = weekOffset)
                 }
                 TodoStore.addTodo(this, item)
                 updateTodoList()
@@ -285,10 +290,11 @@ class MainActivity : AppCompatActivity() {
             }
 
             val dueLabel = if (item.dueMode == "SUBJECT") "Due before ${item.subjectName}" else "Due before next class"
+            val weekSuffix = if (item.weekOffset > 0) " (next week)" else ""
             dueText.text = if (deadline != null) {
-                "$dueLabel · ${dayNames[deadline.get(Calendar.DAY_OF_WEEK) - 1]} ${fmt12HHmm(deadline)}"
+                "$dueLabel$weekSuffix · ${dayNames[deadline.get(Calendar.DAY_OF_WEEK) - 1]} ${fmt12HHmm(deadline)}"
             } else {
-                dueLabel
+                dueLabel + weekSuffix
             }
             dueText.setTextColor(t.slate)
 
@@ -299,6 +305,7 @@ class MainActivity : AppCompatActivity() {
                 updateTodoList()
             }
 
+            deleteBtn.backgroundTintList = null
             deleteBtn.background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 6f * resources.displayMetrics.density
@@ -327,10 +334,6 @@ class MainActivity : AppCompatActivity() {
     private fun setupThemeSpinner() {
         val spinner = findViewById<Spinner>(R.id.themeSpinner)
         val keys = Themes.all.keys.toList()
-        val labels = keys.map { Themes.labels[it] ?: it }
-        spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
-        val index = keys.indexOf(currentThemeKey).takeIf { it >= 0 } ?: 0
-        spinner.setSelection(index, false)
         spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
                 val key = keys[position]
@@ -362,6 +365,52 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Gives the lead-time and theme dropdowns a background that
+     *  actually matches the current theme, and forces their displayed
+     *  text to a color that stays readable against it — previously
+     *  they used the system default text color, which is white and
+     *  becomes invisible on the light/pastel themes' backgrounds. */
+    private fun restyleSpinners(t: ThemeColors) {
+        val leadSpinner = findViewById<Spinner>(R.id.leadSpinner)
+        val themeSpinner = findViewById<Spinner>(R.id.themeSpinner)
+
+        leadSpinner.backgroundTintList = null
+        leadSpinner.background = rounded(t.panel2, 8f)
+        themeSpinner.backgroundTintList = null
+        themeSpinner.background = rounded(t.panel2, 8f)
+
+        val leadLabels = leadOptions.map { "$it min before" }
+        val leadIndex = leadOptions.indexOf(ScheduleStore.getLeadMinutes(this)).takeIf { it >= 0 } ?: 2
+        leadSpinner.adapter = themedSpinnerAdapter(leadLabels, t.ink)
+        leadSpinner.setSelection(leadIndex, false)
+
+        val keys = Themes.all.keys.toList()
+        val themeLabels = keys.map { Themes.labels[it] ?: it }
+        val themeIndex = keys.indexOf(currentThemeKey).takeIf { it >= 0 } ?: 0
+        themeSpinner.adapter = themedSpinnerAdapter(themeLabels, t.ink)
+        themeSpinner.setSelection(themeIndex, false)
+    }
+
+    private fun themedSpinnerAdapter(items: List<String>, textColor: Int): ArrayAdapter<String> {
+        val adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, items) {
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                val v = super.getView(position, convertView, parent)
+                (v as? TextView)?.setTextColor(textColor)
+                return v
+            }
+            override fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                val v = super.getDropDownView(position, convertView, parent)
+                // The dropdown popup itself uses the system's own light
+                // background regardless of our theme, so its text stays
+                // dark for reliable contrast rather than following t.ink.
+                (v as? TextView)?.setTextColor(android.graphics.Color.BLACK)
+                return v
+            }
+        }
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        return adapter
+    }
+
     private fun applyTheme(key: String) {
         val t = Themes.all.getValue(key)
 
@@ -375,33 +424,42 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.statusLine).setTextColor(t.slate)
 
         val enableBtn = findViewById<android.widget.Button>(R.id.enableBtn)
+        enableBtn.backgroundTintList = null
         enableBtn.background = rounded(t.accent, 8f)
         enableBtn.setTextColor(t.accentText)
 
         val manageToggleBtn = findViewById<android.widget.Button>(R.id.manageToggleBtn)
+        manageToggleBtn.backgroundTintList = null
         manageToggleBtn.background = rounded(t.panel, 8f)
         manageToggleBtn.setTextColor(t.ink)
 
         val addBtn = findViewById<android.widget.Button>(R.id.addBtn)
+        addBtn.backgroundTintList = null
         addBtn.background = rounded(t.panel, 8f)
         addBtn.setTextColor(t.ink)
 
         val exportBtn = findViewById<android.widget.Button>(R.id.exportBtn)
+        exportBtn.backgroundTintList = null
         exportBtn.background = rounded(t.panel, 8f)
         exportBtn.setTextColor(t.ink)
 
         val importBtn = findViewById<android.widget.Button>(R.id.importBtn)
+        importBtn.backgroundTintList = null
         importBtn.background = rounded(t.panel, 8f)
         importBtn.setTextColor(t.ink)
 
         val resetBtn = findViewById<android.widget.Button>(R.id.resetBtn)
+        resetBtn.backgroundTintList = null
         resetBtn.background = rounded(t.panel, 8f)
+
+        restyleSpinners(t)
 
         // To-Do tab
         findViewById<TextView>(R.id.todoTitleText).setTextColor(t.accent)
         findViewById<TextView>(R.id.todoSubText).setTextColor(t.slate)
         findViewById<TextView>(R.id.todoEmptyText).setTextColor(t.slate)
         val addTodoBtn = findViewById<android.widget.Button>(R.id.addTodoBtn)
+        addTodoBtn.backgroundTintList = null
         addTodoBtn.background = rounded(t.accent, 8f)
         addTodoBtn.setTextColor(t.accentText)
 
@@ -533,11 +591,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupLeadSpinner() {
         val spinner = findViewById<Spinner>(R.id.leadSpinner)
-        val labels = leadOptions.map { "$it min before" }
-        spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
-        val saved = ScheduleStore.getLeadMinutes(this)
-        val index = leadOptions.indexOf(saved).takeIf { it >= 0 } ?: 2
-        spinner.setSelection(index, false)
         spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
                 val minutes = leadOptions[position]

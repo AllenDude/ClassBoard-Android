@@ -46,6 +46,7 @@ class EntryAdapter(
         holder.root.background = bg
 
         val pillRadius = 6f * holder.root.resources.displayMetrics.density
+        holder.editBtn.backgroundTintList = null
         holder.editBtn.background = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = pillRadius
@@ -53,6 +54,7 @@ class EntryAdapter(
         }
         holder.editBtn.setTextColor(theme.accent)
 
+        holder.deleteBtn.backgroundTintList = null
         holder.deleteBtn.background = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = pillRadius

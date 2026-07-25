@@ -14,6 +14,7 @@ data class TodoItem(
     val text: String,
     val dueMode: String, // "ANY" or "SUBJECT"
     val subjectName: String?,
+    val weekOffset: Int = 0, // 0 = this week's next class, 1 = next week's
     val completed: Boolean = false
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
@@ -21,6 +22,7 @@ data class TodoItem(
         put("text", text)
         put("dueMode", dueMode)
         put("subjectName", subjectName ?: JSONObject.NULL)
+        put("weekOffset", weekOffset)
         put("completed", completed)
     }
 
@@ -30,6 +32,7 @@ data class TodoItem(
             text = o.optString("text", ""),
             dueMode = o.optString("dueMode", "ANY"),
             subjectName = if (o.isNull("subjectName")) null else o.optString("subjectName", null),
+            weekOffset = o.optInt("weekOffset", 0),
             completed = o.optBoolean("completed", false)
         )
     }

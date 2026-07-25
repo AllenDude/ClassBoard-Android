@@ -63,6 +63,12 @@ object TodoStore {
             val at = ScheduleStore.nextOccurrence(entry)
             if (soonest == null || at.before(soonest)) soonest = at
         }
+
+        if (soonest != null && item.weekOffset > 0) {
+            val shifted = soonest!!.clone() as Calendar
+            shifted.add(Calendar.DAY_OF_YEAR, 7 * item.weekOffset)
+            return shifted
+        }
         return soonest
     }
 
