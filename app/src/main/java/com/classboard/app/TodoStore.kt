@@ -58,16 +58,29 @@ object TodoStore {
         }
         if (candidates.isEmpty()) return null
 
+        if (item.weekOffset > 0) {
+            // "Next week's first [subject] class" — find where each
+            // candidate entry falls within that specific future week,
+            // then take the earliest of those. This is deliberately
+            // NOT "this week's soonest occurrence + 7 days", since for
+            // a subject meeting more than once a week that can name
+            // the wrong day entirely (e.g. it could point at next
+            // week's Thursday when next week's Tuesday class is
+            // actually the first one).
+            val targetWeekStart = ScheduleStore.startOfWeek()
+            targetWeekStart.add(Calendar.DAY_OF_YEAR, 7 * item.weekOffset)
+            var soonest: Calendar? = null
+            candidates.forEach { entry ->
+                val at = ScheduleStore.occurrenceInWeek(entry, targetWeekStart)
+                if (soonest == null || at.before(soonest)) soonest = at
+            }
+            return soonest
+        }
+
         var soonest: Calendar? = null
         candidates.forEach { entry ->
             val at = ScheduleStore.nextOccurrence(entry)
             if (soonest == null || at.before(soonest)) soonest = at
-        }
-
-        if (soonest != null && item.weekOffset > 0) {
-            val shifted = soonest!!.clone() as Calendar
-            shifted.add(Calendar.DAY_OF_YEAR, 7 * item.weekOffset)
-            return shifted
         }
         return soonest
     }

@@ -70,6 +70,34 @@ object ScheduleStore {
     /** The next real moment (as a Calendar) this class meeting happens,
      *  measured entirely in this phone's own local time — no timezone
      *  math needed at all, since it never leaves the phone. */
+    /** Midnight on the Sunday that starts the calendar week containing
+     *  `from` (defaults to right now). */
+    fun startOfWeek(from: Calendar = Calendar.getInstance()): Calendar {
+        val c = from.clone() as Calendar
+        c.set(Calendar.HOUR_OF_DAY, 0)
+        c.set(Calendar.MINUTE, 0)
+        c.set(Calendar.SECOND, 0)
+        c.set(Calendar.MILLISECOND, 0)
+        val dow = c.get(Calendar.DAY_OF_WEEK) - 1 // 0=Sun..6=Sat, matches entry.day
+        c.add(Calendar.DAY_OF_YEAR, -dow)
+        return c
+    }
+
+    /** Where this specific class entry falls within the calendar week
+     *  that starts at `weekStart` — used to find "next week's first
+     *  meeting of this subject" precisely, rather than guessing from
+     *  whichever single day happened to be soonest this week. */
+    fun occurrenceInWeek(entry: ScheduleEntry, weekStart: Calendar): Calendar {
+        val c = weekStart.clone() as Calendar
+        c.add(Calendar.DAY_OF_YEAR, entry.day)
+        val (h, m) = entry.start.split(":").map { it.toInt() }
+        c.set(Calendar.HOUR_OF_DAY, h)
+        c.set(Calendar.MINUTE, m)
+        c.set(Calendar.SECOND, 0)
+        c.set(Calendar.MILLISECOND, 0)
+        return c
+    }
+
     fun nextOccurrence(entry: ScheduleEntry, from: Calendar = Calendar.getInstance()): Calendar {
         val (h, m) = entry.start.split(":").map { it.toInt() }
         for (addDays in 0..7) {

@@ -374,10 +374,28 @@ class MainActivity : AppCompatActivity() {
         val leadSpinner = findViewById<Spinner>(R.id.leadSpinner)
         val themeSpinner = findViewById<Spinner>(R.id.themeSpinner)
 
+        // Match the same rounded-panel look AND the same padding feel
+        // as the buttons elsewhere on screen — a Spinner has almost no
+        // built-in padding by default, which is why it looked cramped
+        // and inconsistent next to Enable notifications/Add a class/etc.
+        val padH = (16 * resources.displayMetrics.density).toInt()
+        val padV = (12 * resources.displayMetrics.density).toInt()
+
         leadSpinner.backgroundTintList = null
         leadSpinner.background = rounded(t.panel2, 8f)
+        leadSpinner.setPadding(padH, padV, padH, padV)
+
         themeSpinner.backgroundTintList = null
         themeSpinner.background = rounded(t.panel2, 8f)
+        themeSpinner.setPadding(padH, padV, padH, padV)
+
+        // The dropdown popup's background does NOT reliably follow the
+        // selected theme on its own — it was defaulting to this app's
+        // fixed dark base theme, which is why dark text was invisible
+        // on it. Giving it an explicit background tied to the current
+        // theme removes the guesswork entirely.
+        leadSpinner.setPopupBackgroundDrawable(rounded(t.panel2, 8f, t.accent))
+        themeSpinner.setPopupBackgroundDrawable(rounded(t.panel2, 8f, t.accent))
 
         val leadLabels = leadOptions.map { "$it min before" }
         val leadIndex = leadOptions.indexOf(ScheduleStore.getLeadMinutes(this)).takeIf { it >= 0 } ?: 2
@@ -400,10 +418,14 @@ class MainActivity : AppCompatActivity() {
             }
             override fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
                 val v = super.getDropDownView(position, convertView, parent)
-                // The dropdown popup itself uses the system's own light
-                // background regardless of our theme, so its text stays
-                // dark for reliable contrast rather than following t.ink.
-                (v as? TextView)?.setTextColor(android.graphics.Color.BLACK)
+                // Now that the popup itself is explicitly given the
+                // theme's panel color as its background (see
+                // restyleSpinners), the same ink color used everywhere
+                // else against that panel color stays correctly
+                // readable here too — no more guessing at a fixed
+                // black/white that might clash with whatever the popup
+                // actually renders as.
+                (v as? TextView)?.setTextColor(textColor)
                 return v
             }
         }
