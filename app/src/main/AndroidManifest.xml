@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Lets the app schedule reminders to fire at an exact time,
+    <!-- Lets the app schedule alerts to fire at an exact time,
          even while the phone is in Doze/battery-saver mode. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
@@ -9,31 +9,32 @@
     <!-- Lets the app show notifications at all (required from Android 13+). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Lets the app re-schedule all reminders after the phone restarts,
+    <!-- Lets the app re-schedule all alerts after the phone restarts,
          since a plain scheduled alarm is otherwise wiped by a reboot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-    <!-- Keeps the reminder scheduling logic running long enough to
-         actually reschedule everything right after boot completes. -->
+    <!-- Keeps the scheduling logic running long enough to actually
+         reschedule everything right after boot completes. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Lets the app run a real foreground service while a class is
-         upcoming/ongoing, which is the only Android mechanism that
-         guarantees a notification truly can't be swiped away, in the
-         shade or on the lock screen. -->
+         upcoming/ongoing, which keeps its alert in place in the shade
+         and on the lock screen. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:theme="@style/Theme.ClassBoard"
         android:supportsRtl="true">
 
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -44,11 +45,16 @@
             android:name=".ReminderReceiver"
             android:exported="false" />
 
+        <!-- Re-arms every alert after a restart, an app update, or a
+             change to the phone's clock or time zone. -->
         <receiver
             android:name=".BootReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
         </receiver>
 

@@ -1,8 +1,11 @@
 package com.classboard.app
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -17,7 +20,7 @@ object NotificationHelper {
                 "Class reminders",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Reminders before and during each class"
+                description = "Alerts before and during each class"
                 enableVibration(true)
             }
             val manager = context.getSystemService(NotificationManager::class.java)
@@ -25,37 +28,36 @@ object NotificationHelper {
         }
     }
 
-    /** Builds the Notification object directly, for use with
-     *  Service.startForeground(), which needs the raw object rather
-     *  than something already posted via the NotificationManager. */
-    fun build(context: Context, title: String, body: String): android.app.Notification {
+    private fun builder(context: Context, title: String, body: String): NotificationCompat.Builder {
         ensureChannel(context)
+        val open = PendingIntent.getActivity(
+            context,
+            0,
+            Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle(title)
             .setContentText(body)
+            .setContentIntent(open)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .build()
+            // Every repeat is meant to be noticed, so each update of
+            // the same notification sounds and vibrates again.
+            .setOnlyAlertOnce(false)
     }
 
-    /** Shows (or updates, if the same notificationId is reused) a
-     *  reminder. `ongoing = true` makes it a sticky notification the
-     *  person can't swipe away — used while a class is upcoming or in
-     *  progress — call [cancel] once the class actually ends. */
-    fun show(context: Context, notificationId: Int, title: String, body: String, ongoing: Boolean) {
-        ensureChannel(context)
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setOngoing(ongoing)
-            .setAutoCancel(!ongoing)
-            .setOnlyAlertOnce(true)
-            .build()
+    /** The notification the foreground service holds: it stays put
+     *  until the class ends. */
+    fun build(context: Context, title: String, body: String): Notification =
+        builder(context, title, body).setOngoing(true).build()
 
+    /** A plain notification, used when the foreground service can't
+     *  be started. */
+    fun show(context: Context, notificationId: Int, title: String, body: String) {
+        val notification = builder(context, title, body).setAutoCancel(true).build()
         try {
             NotificationManagerCompat.from(context).notify(notificationId, notification)
         } catch (_: SecurityException) {

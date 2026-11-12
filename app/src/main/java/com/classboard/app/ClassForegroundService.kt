@@ -1,87 +1,98 @@
 package com.classboard.app
 
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import androidx.core.content.ContextCompat
 
 /**
- * A real Android foreground service — the only mechanism the OS
- * actually guarantees can't be swiped away, in the notification shade
- * OR on the lock screen. A plain "ongoing" notification without a
- * backing service can still get dismissed on some phones/Android
- * versions; this can't.
+ * A real Android foreground service — the mechanism the OS guarantees
+ * keeps a notification in place, in the shade and on the lock screen,
+ * while a class is coming up or under way.
  *
- * Precise timing (waking the phone at exactly the right moment) is
- * still handled by AlarmManager in AlarmScheduler — this service just
- * owns the notification while REMIND → ONGOING → END plays out.
+ * Timing is handled by AlarmManager in [AlarmScheduler]; this service
+ * only owns the notification. It always enters the foreground as soon
+ * as it is started, which is what Android requires of a service
+ * started this way.
  */
 class ClassForegroundService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val data = intent ?: return START_NOT_STICKY
-        val phase = data.getStringExtra("phase") ?: return START_NOT_STICKY
-        val id = data.getStringExtra("id") ?: return START_NOT_STICKY
-        val subject = data.getStringExtra("subject") ?: "Class"
-        val room = data.getStringExtra("room") ?: ""
-        val teacher = data.getStringExtra("teacher") ?: ""
-        val day = data.getIntExtra("day", 1)
-        val start = data.getStringExtra("start") ?: "00:00"
-        val end = data.getStringExtra("end") ?: "00:00"
-        val leadMinutes = data.getIntExtra("leadMinutes", 15)
-        val notificationId = id.hashCode()
+        val entryId = intent?.getStringExtra(EXTRA_ENTRY_ID).orEmpty()
+        val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Class reminder"
+        val body = intent?.getStringExtra(EXTRA_BODY).orEmpty()
+        val notificationId = notificationIdFor(entryId)
+        val previous = activeEntryId
 
-        when (phase) {
-            "REMIND" -> {
-                val title = "$subject in $leadMinutes min"
-                val body = buildString {
-                    append(fmt12(start)).append("\u2013").append(fmt12(end))
-                    if (room.isNotBlank()) append(" \u00b7 Room $room")
-                }
-                startAsForeground(notificationId, title, body)
+        try {
+            val notification = NotificationHelper.build(this, title, body)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(notificationId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(notificationId, notification)
             }
-            "ONGOING" -> {
-                val title = "$subject \u2014 ongoing now"
-                val body = buildString {
-                    append("Ends at ").append(fmt12(end))
-                    if (room.isNotBlank()) append(" \u00b7 Room $room")
-                }
-                // Calling startForeground again with the same id simply
-                // updates the existing notification's content in place —
-                // whether this service was already running (normal case)
-                // or just freshly started (e.g. app was reopened and
-                // re-armed mid-class), this always ends up correct.
-                startAsForeground(notificationId, title, body)
+            activeEntryId = entryId
+            // A different class took over the slot (back-to-back
+            // classes): clear the one that was showing before.
+            if (previous != null && previous != entryId) {
+                NotificationHelper.cancel(this, notificationIdFor(previous))
             }
-            "END" -> {
-                NotificationHelper.cancel(this, notificationId)
+            if (entryId.isEmpty()) {
                 stopForeground(STOP_FOREGROUND_REMOVE)
-                // This is the ONLY phase that re-arms next week's cycle —
-                // by now the class has genuinely finished.
-                val entry = ScheduleEntry(id, subject, room, teacher, day, start, end)
-                AlarmScheduler.scheduleNextCycle(applicationContext, entry)
-                stopSelf(startId)
+                stopSelf()
             }
+        } catch (e: Exception) {
+            // The OS refused foreground status; a normal notification
+            // is still better than silence.
+            NotificationHelper.show(this, notificationId, title, body)
+            stopSelf()
         }
         return START_NOT_STICKY
     }
 
-    private fun startAsForeground(notificationId: Int, title: String, body: String) {
-        val notification = NotificationHelper.build(this, title, body)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(notificationId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else {
-            startForeground(notificationId, notification)
-        }
+    override fun onDestroy() {
+        activeEntryId = null
+        super.onDestroy()
     }
 
-    private fun fmt12(hhmm: String): String {
-        val (h, m) = hhmm.split(":").map { it.toInt() }
-        val period = if (h >= 12) "PM" else "AM"
-        val hour12 = if (h % 12 == 0) 12 else h % 12
-        return String.format("%d:%02d %s", hour12, m, period)
+    companion object {
+        private const val EXTRA_ENTRY_ID = "entryId"
+        private const val EXTRA_TITLE = "title"
+        private const val EXTRA_BODY = "body"
+
+        /** The class whose notification the service is holding. */
+        @Volatile
+        private var activeEntryId: String? = null
+
+        fun notificationIdFor(entryId: String): Int = entryId.hashCode()
+
+        /** Shows (or updates) the alert for a class. */
+        fun show(context: Context, entryId: String, title: String, body: String) {
+            val intent = Intent(context, ClassForegroundService::class.java).apply {
+                putExtra(EXTRA_ENTRY_ID, entryId)
+                putExtra(EXTRA_TITLE, title)
+                putExtra(EXTRA_BODY, body)
+            }
+            try {
+                ContextCompat.startForegroundService(context, intent)
+            } catch (e: Exception) {
+                NotificationHelper.show(context, notificationIdFor(entryId), title, body)
+            }
+        }
+
+        /** Removes a class's alert. The service is only stopped when
+         *  it is this class it's holding — when one class ends as the
+         *  next begins, the next one's alert must stay up. */
+        fun dismiss(context: Context, entryId: String) {
+            NotificationHelper.cancel(context, notificationIdFor(entryId))
+            if (activeEntryId == entryId) {
+                context.stopService(Intent(context, ClassForegroundService::class.java))
+            }
+        }
     }
 }

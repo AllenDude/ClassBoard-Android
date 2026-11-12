@@ -1,268 +1,742 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/outerRoot"
+<!--
+  The whole app lives in this one screen: the home page (schedule tabs,
+  next class, weekly timetable) and the settings page, shown one at a
+  time. No colours are set here. Views carry a tag such as "ink",
+  "card" or "primary", and Ui.paint() colours them to match whichever
+  theme is selected.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="#12151C">
+    android:tag="page">
 
-    <FrameLayout
+    <!-- ============================ HOME ============================ -->
+    <LinearLayout
+        android:id="@+id/homePage"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-        <!-- ===================== SCHEDULE TAB ===================== -->
-        <ScrollView
-            android:id="@+id/scheduleScroll"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:fillViewport="true">
-
+        <!-- Header: which schedule is open, plus its options and settings -->
         <LinearLayout
-            android:id="@+id/rootLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="16dp">
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="20dp"
+            android:paddingTop="18dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="8dp">
 
             <LinearLayout
-                android:id="@+id/boardCard"
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="14dp"
-                android:layout_marginBottom="14dp">
+                android:layout_weight="1"
+                android:orientation="vertical">
 
                 <TextView
-                    android:id="@+id/titleText"
+                    android:id="@+id/appLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.14"
+                    android:tag="accent"
                     android:text="CLASS BOARD"
-                    android:textColor="#FFB020"
-                    android:textStyle="bold"
-                    android:textSize="20sp"
-                    android:fontFamily="monospace" />
-
-                <TextView
-                    android:id="@+id/semesterLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:text="1st Sem"
-                    android:textColor="#7A8699"
                     android:textSize="12sp" />
 
                 <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="NEXT UP"
-                    android:textColor="#7A8699"
-                    android:fontFamily="monospace"
-                    android:textSize="10sp"
-                    android:letterSpacing="0.15" />
-
-                <HorizontalScrollView
+                    android:id="@+id/scheduleTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:scrollbars="none">
+                    android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:fontFamily="sans-serif-medium"
+                    android:maxLines="1"
+                    android:tag="ink"
+                    android:textSize="26sp" />
 
-                    <LinearLayout
-                        android:id="@+id/nextUpFlapRow"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal" />
-                </HorizontalScrollView>
-
+                <TextView
+                    android:id="@+id/scheduleNote"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:tag="slate"
+                    android:textSize="14sp" />
             </LinearLayout>
 
-            <Button
-                android:id="@+id/enableBtn"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Enable notifications"
-                android:textColor="#1A1400"
-                android:layout_marginBottom="8dp" />
+            <ImageButton
+                android:id="@+id/scheduleMenuBtn"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="Schedule options"
+                android:scaleType="center"
+                android:src="@drawable/ic_more"
+                android:tag="icon" />
+
+            <ImageButton
+                android:id="@+id/settingsBtn"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="Settings"
+                android:scaleType="center"
+                android:src="@drawable/ic_tune"
+                android:tag="icon" />
+        </LinearLayout>
+
+        <!-- One tab per schedule, then a tab that adds a new one.
+             Filled in code. -->
+        <HorizontalScrollView
+            android:id="@+id/tabScroll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clipToPadding="false"
+            android:paddingStart="16dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="8dp"
+            android:scrollbars="none">
 
             <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="10dp">
-
-                <Spinner
-                    android:id="@+id/leadSpinner"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1" />
-
-                <Spinner
-                    android:id="@+id/themeSpinner"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_marginStart="8dp" />
-            </LinearLayout>
-
-            <TextView
-                android:id="@+id/statusLine"
+                android:id="@+id/tabRow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:text="Notifications: not enabled yet"
-                android:textColor="#7A8699"
-                android:fontFamily="monospace"
-                android:textSize="12sp" />
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
 
-            <!-- Manage schedule (collapsible) -->
-
-            <Button
-                android:id="@+id/manageToggleBtn"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Manage schedule ▾"
-                android:textColor="#EEF0F3"
-                android:layout_marginBottom="8dp" />
+        <ScrollView
+            android:id="@+id/homeScroll"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:paddingBottom="96dp">
 
             <LinearLayout
-                android:id="@+id/manageBody"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:visibility="gone"
-                android:layout_marginBottom="16dp">
+                android:paddingStart="16dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="16dp">
 
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/entryList"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content" />
-
-                <Button
-                    android:id="@+id/addBtn"
+                <!-- Shown when there are no schedules at all -->
+                <LinearLayout
+                    android:id="@+id/noScheduleState"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:text="Add a class"
-                    android:textColor="#EEF0F3" />
+                    android:layout_marginTop="24dp"
+                    android:orientation="vertical"
+                    android:padding="24dp"
+                    android:tag="card"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-medium"
+                        android:tag="ink"
+                        android:text="No schedules yet"
+                        android:textSize="22sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:lineSpacingMultiplier="1.15"
+                        android:tag="slate"
+                        android:text="A schedule is one timetable, such as a semester or a summer term. Create one, add your classes, and each schedule gets its own tab."
+                        android:textSize="15sp" />
+
+                    <TextView
+                        android:id="@+id/createScheduleBtn"
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:layout_marginTop="20dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:gravity="center"
+                        android:tag="primary"
+                        android:text="Create a schedule"
+                        android:textSize="16sp" />
+                </LinearLayout>
+
+                <!-- Everything about the open schedule -->
+                <LinearLayout
+                    android:id="@+id/scheduleContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <!-- Only appears when alerts can't currently be delivered -->
+                    <LinearLayout
+                        android:id="@+id/alertBanner"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingStart="16dp"
+                        android:paddingTop="6dp"
+                        android:paddingEnd="6dp"
+                        android:paddingBottom="6dp"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:id="@+id/bannerText"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:paddingTop="8dp"
+                            android:paddingBottom="8dp"
+                            android:tag="ink"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/bannerAction"
+                            android:layout_width="wrap_content"
+                            android:layout_height="48dp"
+                            android:layout_marginStart="8dp"
+                            android:fontFamily="sans-serif-medium"
+                            android:gravity="center"
+                            android:paddingStart="14dp"
+                            android:paddingEnd="14dp"
+                            android:tag="textbtn"
+                            android:text="Turn on"
+                            android:textSize="14sp" />
+                    </LinearLayout>
+
+                    <!-- The class that is on now, or the next one coming -->
+                    <LinearLayout
+                        android:id="@+id/nextCard"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="20dp"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <TextView
+                            android:id="@+id/nextLabel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-medium"
+                            android:letterSpacing="0.12"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/nextSubject"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:ellipsize="end"
+                            android:fontFamily="sans-serif-medium"
+                            android:maxLines="2"
+                            android:textSize="24sp" />
+
+                        <TextView
+                            android:id="@+id/nextMeta"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:lineSpacingMultiplier="1.15"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:id="@+id/nextCountdown"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="14dp"
+                            android:fontFamily="sans-serif-medium"
+                            android:paddingStart="14dp"
+                            android:paddingTop="7dp"
+                            android:paddingEnd="14dp"
+                            android:paddingBottom="7dp"
+                            android:textSize="14sp" />
+                    </LinearLayout>
+
+                    <!-- Shown when the schedule has no classes -->
+                    <LinearLayout
+                        android:id="@+id/emptyClasses"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="24dp"
+                        android:tag="card"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-medium"
+                            android:tag="ink"
+                            android:text="No classes yet"
+                            android:textSize="20sp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:lineSpacingMultiplier="1.15"
+                            android:tag="slate"
+                            android:text="Use the Add class button to start filling in this schedule. The timetable appears here as soon as there is something to show."
+                            android:textSize="15sp" />
+                    </LinearLayout>
+
+                    <!-- Timetable heading and the Table / List switch -->
+                    <LinearLayout
+                        android:id="@+id/weekHeader"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="10dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:fontFamily="sans-serif-medium"
+                            android:tag="ink"
+                            android:text="Weekly timetable"
+                            android:textSize="18sp" />
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:padding="3dp"
+                            android:tag="inset">
+
+                            <TextView
+                                android:id="@+id/tableToggle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="42dp"
+                                android:fontFamily="sans-serif-medium"
+                                android:gravity="center"
+                                android:minWidth="64dp"
+                                android:paddingStart="14dp"
+                                android:paddingEnd="14dp"
+                                android:text="Table"
+                                android:textSize="14sp" />
+
+                            <TextView
+                                android:id="@+id/listToggle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="42dp"
+                                android:fontFamily="sans-serif-medium"
+                                android:gravity="center"
+                                android:minWidth="64dp"
+                                android:paddingStart="14dp"
+                                android:paddingEnd="14dp"
+                                android:text="List"
+                                android:textSize="14sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Table view: days across, hours down. Scrolls
+                         sideways when a weekend makes it too wide. -->
+                    <FrameLayout
+                        android:id="@+id/tableCard"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingStart="4dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="10dp"
+                        android:paddingBottom="4dp"
+                        android:tag="card">
+
+                        <HorizontalScrollView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fillViewport="true"
+                            android:scrollbars="none">
+
+                            <com.classboard.app.TimetableView
+                                android:id="@+id/timetable"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content" />
+                        </HorizontalScrollView>
+                    </FrameLayout>
+
+                    <!-- List view: the same classes, day by day.
+                         Filled in code. -->
+                    <LinearLayout
+                        android:id="@+id/listContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/addClassFab"
+        android:layout_width="wrap_content"
+        android:layout_height="56dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="20dp"
+        android:layout_marginBottom="24dp"
+        android:drawablePadding="8dp"
+        android:drawableStart="@drawable/ic_add"
+        android:elevation="6dp"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center"
+        android:paddingStart="18dp"
+        android:paddingEnd="22dp"
+        android:text="Add class"
+        android:textSize="16sp" />
+
+    <!-- ========================== SETTINGS ========================== -->
+    <LinearLayout
+        android:id="@+id/settingsPage"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:tag="page"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingTop="14dp"
+            android:paddingEnd="20dp"
+            android:paddingBottom="8dp">
+
+            <ImageButton
+                android:id="@+id/settingsBackBtn"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="Back"
+                android:scaleType="center"
+                android:src="@drawable/ic_back"
+                android:tag="icon" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:fontFamily="sans-serif-medium"
+                android:tag="ink"
+                android:text="Settings"
+                android:textSize="24sp" />
+        </LinearLayout>
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:paddingBottom="32dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="16dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="16dp">
+
+                <!-- ALERTS -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginBottom="8dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.12"
+                    android:tag="slate"
+                    android:text="ALERTS"
+                    android:textSize="12sp" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginTop="8dp">
+                    android:layout_marginBottom="24dp"
+                    android:orientation="vertical"
+                    android:padding="18dp"
+                    android:tag="card">
 
-                    <Button
-                        android:id="@+id/exportBtn"
-                        android:layout_width="0dp"
+                    <TextView
+                        android:id="@+id/alertStatus"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="Export backup"
-                        android:textSize="12sp"
-                        android:textColor="#EEF0F3" />
+                        android:lineSpacingMultiplier="1.15"
+                        android:tag="slate"
+                        android:textSize="14sp" />
 
-                    <Button
-                        android:id="@+id/importBtn"
-                        android:layout_width="0dp"
+                    <TextView
+                        android:id="@+id/enableBtn"
+                        android:layout_width="match_parent"
+                        android:layout_height="50dp"
+                        android:layout_marginTop="14dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:gravity="center"
+                        android:tag="primary"
+                        android:text="Turn on alerts"
+                        android:textSize="16sp" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="18dp"
+                        android:layout_marginBottom="18dp"
+                        android:tag="divider" />
+
+                    <!-- Setting 1: how long before class alerts begin -->
+                    <TextView
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:layout_marginStart="8dp"
-                        android:text="Import backup"
-                        android:textSize="12sp"
-                        android:textColor="#EEF0F3" />
+                        android:fontFamily="sans-serif-medium"
+                        android:tag="ink"
+                        android:text="Start alerting"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:tag="slate"
+                        android:text="How many minutes before a class the first alert arrives."
+                        android:textSize="14sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/leadMinus"
+                            android:layout_width="52dp"
+                            android:layout_height="52dp"
+                            android:contentDescription="Start alerting later"
+                            android:gravity="center"
+                            android:tag="step"
+                            android:text="−"
+                            android:textSize="24sp" />
+
+                        <TextView
+                            android:id="@+id/leadValue"
+                            android:layout_width="0dp"
+                            android:layout_height="52dp"
+                            android:layout_marginStart="8dp"
+                            android:layout_marginEnd="8dp"
+                            android:layout_weight="1"
+                            android:fontFamily="sans-serif-medium"
+                            android:gravity="center"
+                            android:tag="step"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:id="@+id/leadPlus"
+                            android:layout_width="52dp"
+                            android:layout_height="52dp"
+                            android:contentDescription="Start alerting earlier"
+                            android:gravity="center"
+                            android:tag="step"
+                            android:text="+"
+                            android:textSize="24sp" />
+                    </LinearLayout>
+
+                    <!-- Setting 2: how often alerts repeat after that -->
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="22dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:tag="ink"
+                        android:text="Repeat every"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:tag="slate"
+                        android:text="How often the alert comes back until the class starts."
+                        android:textSize="14sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/repeatMinus"
+                            android:layout_width="52dp"
+                            android:layout_height="52dp"
+                            android:contentDescription="Repeat more often"
+                            android:gravity="center"
+                            android:tag="step"
+                            android:text="−"
+                            android:textSize="24sp" />
+
+                        <TextView
+                            android:id="@+id/repeatValue"
+                            android:layout_width="0dp"
+                            android:layout_height="52dp"
+                            android:layout_marginStart="8dp"
+                            android:layout_marginEnd="8dp"
+                            android:layout_weight="1"
+                            android:fontFamily="sans-serif-medium"
+                            android:gravity="center"
+                            android:tag="step"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:id="@+id/repeatPlus"
+                            android:layout_width="52dp"
+                            android:layout_height="52dp"
+                            android:contentDescription="Repeat less often"
+                            android:gravity="center"
+                            android:tag="step"
+                            android:text="+"
+                            android:textSize="24sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:tag="slate"
+                        android:text="Tap either number to type an exact value."
+                        android:textSize="13sp" />
+
+                    <!-- What the two settings add up to, in plain words -->
+                    <TextView
+                        android:id="@+id/alertSummary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:lineSpacingMultiplier="1.15"
+                        android:padding="14dp"
+                        android:textSize="14sp" />
                 </LinearLayout>
 
-                <Button
-                    android:id="@+id/resetBtn"
+                <!-- THEME -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginBottom="8dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.12"
+                    android:tag="slate"
+                    android:text="THEME"
+                    android:textSize="12sp" />
+
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="Reset to sample schedule"
-                    android:textSize="12sp"
-                    android:textColor="#FF6B6B" />
+                    android:layout_marginBottom="24dp"
+                    android:orientation="vertical"
+                    android:paddingTop="18dp"
+                    android:paddingBottom="18dp"
+                    android:tag="card">
 
+                    <HorizontalScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:clipToPadding="false"
+                        android:paddingStart="18dp"
+                        android:paddingEnd="6dp"
+                        android:scrollbars="none">
+
+                        <LinearLayout
+                            android:id="@+id/themeRow"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal" />
+                    </HorizontalScrollView>
+
+                    <TextView
+                        android:id="@+id/themeName"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:paddingStart="18dp"
+                        android:paddingEnd="18dp"
+                        android:tag="ink"
+                        android:textSize="15sp" />
+                </LinearLayout>
+
+                <!-- BACKUP -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginBottom="8dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.12"
+                    android:tag="slate"
+                    android:text="BACKUP"
+                    android:textSize="12sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="18dp"
+                    android:tag="card">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:lineSpacingMultiplier="1.15"
+                        android:tag="slate"
+                        android:text="Export saves every schedule to one file. Import adds the schedules from a file as new tabs and leaves the ones already here untouched."
+                        android:textSize="14sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/exportBtn"
+                            android:layout_width="0dp"
+                            android:layout_height="50dp"
+                            android:layout_weight="1"
+                            android:fontFamily="sans-serif-medium"
+                            android:gravity="center"
+                            android:tag="secondary"
+                            android:text="Export"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:id="@+id/importBtn"
+                            android:layout_width="0dp"
+                            android:layout_height="50dp"
+                            android:layout_marginStart="10dp"
+                            android:layout_weight="1"
+                            android:fontFamily="sans-serif-medium"
+                            android:gravity="center"
+                            android:tag="secondary"
+                            android:text="Import"
+                            android:textSize="15sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:gravity="center"
+                    android:tag="slate"
+                    android:text="Everything is stored on this phone only."
+                    android:textSize="13sp" />
             </LinearLayout>
-
-            <!-- Read-only week-at-a-glance, always visible -->
-
-            <LinearLayout
-                android:id="@+id/weekListContainer"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
-
-        </LinearLayout>
         </ScrollView>
-
-        <!-- ===================== TO-DO TAB ===================== -->
-        <ScrollView
-            android:id="@+id/todoScroll"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:fillViewport="true"
-            android:visibility="gone">
-
-        <LinearLayout
-            android:id="@+id/todoRootLayout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="16dp">
-
-            <TextView
-                android:id="@+id/todoTitleText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="TO-DO"
-                android:textColor="#FFB020"
-                android:textStyle="bold"
-                android:textSize="20sp"
-                android:fontFamily="monospace" />
-
-            <TextView
-                android:id="@+id/todoSubText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:layout_marginBottom="16dp"
-                android:text="Tasks tied to your class schedule — due dates set themselves"
-                android:textColor="#7A8699"
-                android:textSize="12sp" />
-
-            <Button
-                android:id="@+id/addTodoBtn"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Add a to-do"
-                android:textColor="#1A1400"
-                android:layout_marginBottom="14dp" />
-
-            <LinearLayout
-                android:id="@+id/todoListContainer"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
-
-            <TextView
-                android:id="@+id/todoEmptyText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Nothing on your list right now."
-                android:textColor="#7A8699"
-                android:fontFamily="monospace"
-                android:textSize="12sp"
-                android:visibility="gone" />
-
-        </LinearLayout>
-        </ScrollView>
-
-    </FrameLayout>
-
-    <com.google.android.material.bottomnavigation.BottomNavigationView
-        android:id="@+id/bottomNav"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:menu="@menu/bottom_nav_menu"
-        xmlns:app="http://schemas.android.com/apk/res-auto" />
-
-</LinearLayout>
+    </LinearLayout>
+</FrameLayout>

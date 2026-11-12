@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The shell every dialog in the app uses: a title, an optional
+     message, room for a form, and up to three buttons. Coloured in
+     code so it always matches the selected theme. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/dialogRoot"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingTop="22dp"
+    android:paddingBottom="8dp">
+
+    <TextView
+        android:id="@+id/dialogTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-medium"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:tag="ink"
+        android:textSize="20sp" />
+
+    <TextView
+        android:id="@+id/dialogMessage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:lineSpacingMultiplier="1.15"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:tag="slate"
+        android:textSize="15sp"
+        android:visibility="gone" />
+
+    <!-- Takes whatever height is left, so the buttons stay visible
+         when the keyboard is open and the form has to scroll. -->
+    <FrameLayout
+        android:id="@+id/dialogContent"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_weight="1" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp">
+
+        <TextView
+            android:id="@+id/dialogNeutral"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:tag="textbtn"
+            android:textSize="15sp"
+            android:visibility="gone" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/dialogNegative"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:tag="textbtn"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/dialogPositive"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:tag="textbtn"
+            android:textSize="15sp" />
+    </LinearLayout>
+</LinearLayout>

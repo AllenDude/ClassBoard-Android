@@ -1,56 +1,100 @@
 package com.classboard.app
 
+import android.Manifest
 import android.app.AlarmManager
-import android.app.AlertDialog
-import android.app.TimePickerDialog
 import android.content.Intent
-import android.graphics.drawable.GradientDrawable
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.InsetDrawable
+import android.graphics.drawable.LayerDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
+import android.text.TextUtils
+import android.view.Gravity
 import android.view.View
-import android.widget.ArrayAdapter
-import android.widget.EditText
+import android.view.ViewGroup
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
-import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.view.WindowCompat
 import java.util.Calendar
-import java.util.UUID
 
+/**
+ * The app's single screen. It shows one of two pages:
+ *
+ *   Home      a tab per schedule, the next class, and that schedule's
+ *             week as a timetable (Table) or a day-by-day list (List)
+ *   Settings  alert timing, colour theme, backup
+ *
+ * Nothing is kept in memory between changes: after anything is edited
+ * the screen is simply redrawn from what's stored (see [refresh]).
+ */
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var adapter: EntryAdapter
-    private val dayNames = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
-    private val leadOptions = listOf(5, 10, 15, 30, 60)
-    private var currentThemeKey: String = "default"
+    private var themeKey = "default"
+    private var theme: ThemeColors = Themes.get(themeKey)
+    private var schedules: List<Schedule> = emptyList()
+    private var activeId: String? = null
+    private var settingsOpen = false
+    private var bannerMode = BANNER_NONE
+    private lateinit var dialogs: Dialogs
+
+    private val active: Schedule? get() = schedules.firstOrNull { it.id == activeId }
+
+    /** Keeps the countdown and the timetable's "now" line current
+     *  while the app is on screen. */
+    private val handler = Handler(Looper.getMainLooper())
+    private val ticker = object : Runnable {
+        override fun run() {
+            renderNextUp()
+            v<TimetableView>(R.id.timetable).invalidate()
+            handler.postDelayed(this, TICK_MS)
+        }
+    }
+
+    private val backToHome = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            showSettings(false)
+        }
+    }
 
     private val notifPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) proceedAfterNotifPermission()
-        else {
-            Toast.makeText(this, "Notifications permission was denied.", Toast.LENGTH_LONG).show()
-            updateStatusLine()
+        if (granted) {
+            proceedAfterNotifPermission()
+        } else if (!ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.POST_NOTIFICATIONS)) {
+            // Android won't show its own prompt any more; the switch
+            // now lives in the system settings.
+            openNotificationSettings()
+        } else {
+            toast("Notifications were not allowed, so alerts stay off.")
+            refresh()
         }
     }
 
     private val exportLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
-        uri?.let {
+        if (uri != null) {
             try {
-                contentResolver.openOutputStream(it)?.use { out ->
+                contentResolver.openOutputStream(uri)?.use { out ->
                     out.write(ScheduleStore.exportBackupJson(this).toByteArray())
                 }
-                Toast.makeText(this, "Backup saved.", Toast.LENGTH_SHORT).show()
+                toast("Backup saved.")
             } catch (e: Exception) {
-                Toast.makeText(this, "Couldn't save the backup.", Toast.LENGTH_SHORT).show()
+                toast("Couldn't save the backup.")
             }
         }
     }
@@ -58,700 +102,641 @@ class MainActivity : AppCompatActivity() {
     private val importLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
-        uri?.let {
+        if (uri != null) {
             try {
-                val text = contentResolver.openInputStream(it)?.bufferedReader()?.use { r -> r.readText() }
-                val ok = text != null && ScheduleStore.importBackupJson(this, text)
-                if (ok) {
-                    Toast.makeText(this, "Schedule imported.", Toast.LENGTH_SHORT).show()
-                    refreshEverything()
+                val text = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                val added = if (text == null) emptyList() else ScheduleStore.importBackupJson(this, text)
+                if (added.isEmpty()) {
+                    toast("That file didn't look like a Class Board backup.")
                 } else {
-                    Toast.makeText(this, "That file didn't look like a Class Board backup.", Toast.LENGTH_LONG).show()
+                    ScheduleStore.setActiveId(this, added.first().id)
+                    AlarmScheduler.scheduleAll(this)
+                    showSettings(false)
+                    toast(if (added.size == 1) "1 schedule imported." else "${added.size} schedules imported.")
                 }
             } catch (e: Exception) {
-                Toast.makeText(this, "Couldn't read that file.", Toast.LENGTH_SHORT).show()
+                toast("Couldn't read that file.")
             }
         }
     }
+
+    // ---------------- Lifecycle ----------------
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        currentThemeKey = Themes.getSaved(this)
+        themeKey = Themes.getSaved(this)
+        theme = Themes.get(themeKey)
+        dialogs = Dialogs(this) { theme }
+        NotificationHelper.ensureChannel(this)
+        onBackPressedDispatcher.addCallback(this, backToHome)
 
-        setupHeader()
+        wireHome()
+        wireSettings()
+        refresh()
 
-        val recyclerView = findViewById<RecyclerView>(R.id.entryList)
-        recyclerView.layoutManager = LinearLayoutManager(this)
-        recyclerView.isNestedScrollingEnabled = false
-        adapter = EntryAdapter(
-            ScheduleStore.getSchedule(this).sortedWith(compareBy({ it.day }, { it.start })),
-            Themes.all.getValue(currentThemeKey),
-            onEdit = { showEntryDialog(it) },
-            onDelete = { deleteEntry(it) }
-        )
-        recyclerView.adapter = adapter
-
-        setupLeadSpinner()
-        setupThemeSpinner()
-        setupManageToggle()
-        setupBottomNav()
-        setupTodoTab()
-
-        findViewById<android.widget.Button>(R.id.enableBtn).setOnClickListener {
-            requestNotificationsAndAlarms()
-        }
-        findViewById<android.widget.Button>(R.id.addBtn).setOnClickListener {
-            showEntryDialog(null)
-        }
-        findViewById<android.widget.Button>(R.id.exportBtn).setOnClickListener {
-            val safeSem = ScheduleStore.getSemesterLabel(this).replace(Regex("[^a-zA-Z0-9]+"), "-").lowercase()
-            exportLauncher.launch("class-board-${safeSem.ifBlank { "backup" }}.json")
-        }
-        findViewById<android.widget.Button>(R.id.importBtn).setOnClickListener {
-            importLauncher.launch(arrayOf("application/json"))
-        }
-        findViewById<android.widget.Button>(R.id.resetBtn).setOnClickListener {
-            AlertDialog.Builder(themedContext())
-                .setTitle("Reset schedule?")
-                .setMessage("This replaces your current classes with the original sample schedule.")
-                .setPositiveButton("Reset") { _, _ ->
-                    ScheduleStore.resetToDefault(this)
-                    refreshEverything()
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
-        }
-
-        applyTheme(currentThemeKey)
-        updateStatusLine()
-        refreshEverything()
+        // Puts back any alarm the OS has dropped since the last visit.
+        AlarmScheduler.scheduleAll(this)
     }
 
     override fun onResume() {
         super.onResume()
-        updateStatusLine()
-        refreshEverything()
+        refresh()
+        handler.removeCallbacks(ticker)
+        handler.postDelayed(ticker, TICK_MS)
     }
 
-    private fun refreshEverything() {
-        refreshList()
-        updateNextUp()
-        updateWeekList()
-        updateTodoList()
+    override fun onPause() {
+        handler.removeCallbacks(ticker)
+        super.onPause()
     }
 
-    // ---------------- Header (semester / program) ----------------
+    // ---------------- Small helpers ----------------
 
-    private fun setupHeader() {
-        val semesterLabel = findViewById<TextView>(R.id.semesterLabel)
-        fun refreshHeader() {
-            semesterLabel.text = "${ScheduleStore.getSemesterLabel(this)} · ${ScheduleStore.getProgramLabel(this)}"
+    private fun <T : View> v(id: Int): T = findViewById(id)
+
+    private fun dp(value: Float): Int = Ui.dp(this, value)
+
+    private fun toast(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+
+    private fun show(view: View, visible: Boolean) {
+        view.visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
+    private val medium: Typeface get() = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+
+    // ---------------- Wiring ----------------
+
+    private fun wireHome() {
+        v<View>(R.id.settingsBtn).setOnClickListener { showSettings(true) }
+        v<View>(R.id.scheduleMenuBtn).setOnClickListener { showScheduleMenu() }
+        v<View>(R.id.createScheduleBtn).setOnClickListener { createSchedule() }
+        v<View>(R.id.addClassFab).setOnClickListener { addClass() }
+        v<View>(R.id.bannerAction).setOnClickListener { onBannerAction() }
+        v<View>(R.id.tableToggle).setOnClickListener { setViewMode(ScheduleStore.VIEW_TABLE) }
+        v<View>(R.id.listToggle).setOnClickListener { setViewMode(ScheduleStore.VIEW_LIST) }
+        v<TimetableView>(R.id.timetable).onEntryClick = { editClass(it) }
+    }
+
+    private fun wireSettings() {
+        v<View>(R.id.settingsBackBtn).setOnClickListener { showSettings(false) }
+        v<View>(R.id.enableBtn).setOnClickListener { requestNotificationsAndAlarms() }
+
+        v<View>(R.id.leadMinus).setOnClickListener { stepLead(-1) }
+        v<View>(R.id.leadPlus).setOnClickListener { stepLead(1) }
+        v<View>(R.id.leadValue).setOnClickListener {
+            dialogs.minutes(
+                "Start alerting",
+                "Minutes before a class, from 1 to ${ScheduleStore.MAX_LEAD_MINUTES}.",
+                ScheduleStore.getLeadMinutes(this),
+                1,
+                ScheduleStore.MAX_LEAD_MINUTES
+            ) { setAlertTiming(it, ScheduleStore.getRepeatMinutes(this)) }
         }
-        refreshHeader()
-        semesterLabel.setOnClickListener {
-            val dialogView = android.view.LayoutInflater.from(themedContext()).inflate(R.layout.dialog_header_edit, null)
-            val semInput = dialogView.findViewById<EditText>(R.id.semInput)
-            val progInput = dialogView.findViewById<EditText>(R.id.progInput)
-            semInput.setText(ScheduleStore.getSemesterLabel(this))
-            progInput.setText(
-                ScheduleStore.getProgramLabel(this).let { if (it.startsWith("Add your program")) "" else it }
-            )
-            AlertDialog.Builder(themedContext())
-                .setTitle("Your details")
-                .setView(dialogView)
-                .setPositiveButton("Save") { _, _ ->
-                    val sem = semInput.text.toString().trim().ifEmpty { "1st Sem" }
-                    val prog = progInput.text.toString().trim().ifEmpty { "Add your program in Settings ›" }
-                    ScheduleStore.setSemesterLabel(this, sem)
-                    ScheduleStore.setProgramLabel(this, prog)
-                    refreshHeader()
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
-        }
-    }
 
-    // ---------------- Manage panel toggle ----------------
-
-    private fun setupManageToggle() {
-        val toggleBtn = findViewById<android.widget.Button>(R.id.manageToggleBtn)
-        val body = findViewById<LinearLayout>(R.id.manageBody)
-        toggleBtn.setOnClickListener {
-            val nowVisible = body.visibility != View.VISIBLE
-            body.visibility = if (nowVisible) View.VISIBLE else View.GONE
-            toggleBtn.text = if (nowVisible) "Manage schedule ▴" else "Manage schedule ▾"
-        }
-    }
-
-    // ---------------- Bottom nav (tab switching) ----------------
-
-    private fun setupBottomNav() {
-        val bottomNav = findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.bottomNav)
-        val scheduleScroll = findViewById<View>(R.id.scheduleScroll)
-        val todoScroll = findViewById<View>(R.id.todoScroll)
-
-        bottomNav.setOnItemSelectedListener { item ->
-            when (item.itemId) {
-                R.id.nav_schedule -> {
-                    scheduleScroll.visibility = View.VISIBLE
-                    todoScroll.visibility = View.GONE
-                    true
-                }
-                R.id.nav_todo -> {
-                    scheduleScroll.visibility = View.GONE
-                    todoScroll.visibility = View.VISIBLE
-                    updateTodoList()
-                    true
-                }
-                else -> false
-            }
-        }
-    }
-
-    // ---------------- To-Do tab ----------------
-
-    private fun setupTodoTab() {
-        findViewById<android.widget.Button>(R.id.addTodoBtn).setOnClickListener {
-            showAddTodoDialog()
-        }
-    }
-
-    private fun showAddTodoDialog() {
-        val subjects = ScheduleStore.getSchedule(this).map { it.subject }.distinct()
-        if (subjects.isEmpty()) {
-            Toast.makeText(this, "Add a class to your schedule first.", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val options = listOf("Any next class") + subjects
-
-        val view = android.view.LayoutInflater.from(themedContext()).inflate(R.layout.dialog_add_todo, null)
-        val textInput = view.findViewById<EditText>(R.id.todoTextInput)
-        val dueSpinner = view.findViewById<Spinner>(R.id.todoDueSpinner)
-        dueSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, options)
-
-        val weekSpinner = view.findViewById<Spinner>(R.id.todoWeekSpinner)
-        val weekOptions = listOf("This week", "Next week")
-        weekSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, weekOptions)
-
-        AlertDialog.Builder(themedContext())
-            .setTitle("Add a to-do")
-            .setView(view)
-            .setPositiveButton("Add") { _, _ ->
-                val text = textInput.text.toString().trim()
-                if (text.isEmpty()) {
-                    Toast.makeText(this, "Task can't be empty.", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                val position = dueSpinner.selectedItemPosition
-                val weekOffset = weekSpinner.selectedItemPosition // 0 = this week, 1 = next week
-                val item = if (position == 0) {
-                    TodoItem(id = UUID.randomUUID().toString(), text = text, dueMode = "ANY", subjectName = null, weekOffset = weekOffset)
-                } else {
-                    TodoItem(id = UUID.randomUUID().toString(), text = text, dueMode = "SUBJECT", subjectName = subjects[position - 1], weekOffset = weekOffset)
-                }
-                TodoStore.addTodo(this, item)
-                updateTodoList()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun updateTodoList() {
-        val t = Themes.all.getValue(currentThemeKey)
-        val container = findViewById<LinearLayout>(R.id.todoListContainer)
-        val emptyText = findViewById<TextView>(R.id.todoEmptyText)
-        container.removeAllViews()
-
-        val items = TodoStore.pruneAndSort(this)
-        emptyText.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
-
-        items.forEach { (item, deadline) ->
-            val row = layoutInflater.inflate(R.layout.item_todo, container, false)
-            val bg = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = 8f * resources.displayMetrics.density
-                setColor(t.panel)
-            }
-            row.background = bg
-
-            val check = row.findViewById<android.widget.CheckBox>(R.id.todoCheck)
-            val textView = row.findViewById<TextView>(R.id.todoText)
-            val dueText = row.findViewById<TextView>(R.id.todoDueText)
-            val deleteBtn = row.findViewById<android.widget.Button>(R.id.todoDeleteBtn)
-
-            textView.text = item.text
-            textView.setTextColor(t.ink)
-            textView.paintFlags = if (item.completed) {
-                textView.paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
+        v<View>(R.id.repeatMinus).setOnClickListener { stepRepeat(-1) }
+        v<View>(R.id.repeatPlus).setOnClickListener { stepRepeat(1) }
+        v<View>(R.id.repeatValue).setOnClickListener {
+            val lead = ScheduleStore.getLeadMinutes(this)
+            if (lead <= 1) {
+                toast("Alerts start 1 minute ahead, so there is no room to repeat.")
             } else {
-                textView.paintFlags and android.graphics.Paint.STRIKE_THRU_TEXT_FLAG.inv()
+                dialogs.minutes(
+                    "Repeat every",
+                    "Minutes between alerts, from 1 to ${lead - 1}. Enter 0 to turn repeating off.",
+                    ScheduleStore.getRepeatMinutes(this),
+                    0,
+                    lead - 1
+                ) { setAlertTiming(lead, it) }
             }
+        }
 
-            val dueLabel = if (item.dueMode == "SUBJECT") "Due before ${item.subjectName}" else "Due before next class"
-            val weekSuffix = if (item.weekOffset > 0) " (next week)" else ""
-            dueText.text = if (deadline != null) {
-                "$dueLabel$weekSuffix · ${dayNames[deadline.get(Calendar.DAY_OF_WEEK) - 1]} ${fmt12HHmm(deadline)}"
-            } else {
-                dueLabel + weekSuffix
-            }
-            dueText.setTextColor(t.slate)
-
-            check.setOnCheckedChangeListener(null)
-            check.isChecked = item.completed
-            check.setOnCheckedChangeListener { _, isChecked ->
-                TodoStore.setCompleted(this, item.id, isChecked)
-                updateTodoList()
-            }
-
-            deleteBtn.backgroundTintList = null
-            deleteBtn.background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = 6f * resources.displayMetrics.density
-                setColor(t.panel2)
-            }
-            deleteBtn.setTextColor(0xFFFF6B6B.toInt())
-            deleteBtn.setOnClickListener {
-                TodoStore.deleteTodo(this, item.id)
-                updateTodoList()
-            }
-
-            container.addView(row)
+        v<View>(R.id.exportBtn).setOnClickListener { exportLauncher.launch("class-board-backup.json") }
+        v<View>(R.id.importBtn).setOnClickListener {
+            importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
         }
     }
 
-    private fun fmt12HHmm(cal: Calendar): String {
-        val h = cal.get(Calendar.HOUR_OF_DAY)
-        val m = cal.get(Calendar.MINUTE)
-        val period = if (h >= 12) "PM" else "AM"
-        val hour12 = if (h % 12 == 0) 12 else h % 12
-        return String.format("%d:%02d %s", hour12, m, period)
+    // ---------------- Drawing the screen ----------------
+
+    /** Reloads what's stored and redraws everything from it. */
+    private fun refresh() {
+        schedules = ScheduleStore.getSchedules(this)
+        val saved = ScheduleStore.getActiveId(this)
+        activeId = (schedules.firstOrNull { it.id == saved } ?: schedules.firstOrNull())?.id
+
+        applyChrome()
+        Ui.paint(v<View>(R.id.root), theme)
+
+        show(v(R.id.homePage), !settingsOpen)
+        show(v(R.id.settingsPage), settingsOpen)
+        renderHeader()
+        renderTabs()
+        renderAlertBanner()
+        renderNextUp()
+        renderWeek()
+        renderFab()
+        renderSettings()
     }
 
-    // ---------------- Theming ----------------
+    /** Status and navigation bars follow the theme too. */
+    private fun applyChrome() {
+        window.statusBarColor = theme.bg
+        window.navigationBarColor = theme.bg
+        val bars = WindowCompat.getInsetsController(window, window.decorView)
+        bars.isAppearanceLightStatusBars = theme.isLight
+        bars.isAppearanceLightNavigationBars = theme.isLight
+    }
 
-    private fun setupThemeSpinner() {
-        val spinner = findViewById<Spinner>(R.id.themeSpinner)
-        val keys = Themes.all.keys.toList()
-        spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val key = keys[position]
-                if (key != currentThemeKey) {
-                    currentThemeKey = key
-                    Themes.save(this@MainActivity, key)
-                    applyTheme(key)
-                }
-            }
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+    private fun showSettings(open: Boolean) {
+        settingsOpen = open
+        backToHome.isEnabled = open
+        refresh()
+    }
+
+    private fun renderHeader() {
+        val s = active
+        show(v(R.id.appLabel), s != null)
+        show(v(R.id.scheduleMenuBtn), s != null)
+        v<TextView>(R.id.scheduleTitle).text = s?.name?.ifBlank { "Untitled schedule" } ?: "Class Board"
+        v<TextView>(R.id.scheduleNote).text = if (s == null) {
+            "Timetables and class alerts"
+        } else {
+            val parts = mutableListOf<String>()
+            if (s.note.isNotBlank()) parts.add(s.note)
+            parts.add(if (s.entries.size == 1) "1 class" else "${s.entries.size} classes")
+            if (!s.alertsEnabled) parts.add("alerts off")
+            parts.joinToString("  ·  ")
         }
     }
 
-    /** Wraps the activity in the current theme's dialog style, so any
-     *  AlertDialog (and anything inflated with its LayoutInflater)
-     *  actually matches the selected theme instead of looking like
-     *  the system default. */
-    private fun themedContext(): android.content.Context {
-        val styleRes = Themes.dialogStyle[currentThemeKey] ?: R.style.Dialog_Default
-        return androidx.appcompat.view.ContextThemeWrapper(this, styleRes)
-    }
-
-    private fun rounded(colorInt: Int, radiusDp: Float, strokeColor: Int? = null): GradientDrawable {
-        return GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = radiusDp * resources.displayMetrics.density
-            setColor(colorInt)
-            strokeColor?.let { setStroke((1.5f * resources.displayMetrics.density).toInt(), it) }
-        }
-    }
-
-    /** Gives the lead-time and theme dropdowns a background that
-     *  actually matches the current theme, and forces their displayed
-     *  text to a color that stays readable against it — previously
-     *  they used the system default text color, which is white and
-     *  becomes invisible on the light/pastel themes' backgrounds. */
-    private fun restyleSpinners(t: ThemeColors) {
-        val leadSpinner = findViewById<Spinner>(R.id.leadSpinner)
-        val themeSpinner = findViewById<Spinner>(R.id.themeSpinner)
-
-        // Match the same rounded-panel look AND the same padding feel
-        // as the buttons elsewhere on screen — a Spinner has almost no
-        // built-in padding by default, which is why it looked cramped
-        // and inconsistent next to Enable notifications/Add a class/etc.
-        val padH = (16 * resources.displayMetrics.density).toInt()
-        val padV = (12 * resources.displayMetrics.density).toInt()
-
-        leadSpinner.backgroundTintList = null
-        leadSpinner.background = rounded(t.panel2, 8f)
-        leadSpinner.setPadding(padH, padV, padH, padV)
-
-        themeSpinner.backgroundTintList = null
-        themeSpinner.background = rounded(t.panel2, 8f)
-        themeSpinner.setPadding(padH, padV, padH, padV)
-
-        // The dropdown popup's background does NOT reliably follow the
-        // selected theme on its own — it was defaulting to this app's
-        // fixed dark base theme, which is why dark text was invisible
-        // on it. Giving it an explicit background tied to the current
-        // theme removes the guesswork entirely.
-        leadSpinner.setPopupBackgroundDrawable(rounded(t.panel2, 8f, t.accent))
-        themeSpinner.setPopupBackgroundDrawable(rounded(t.panel2, 8f, t.accent))
-
-        val leadLabels = leadOptions.map { "$it min before" }
-        val leadIndex = leadOptions.indexOf(ScheduleStore.getLeadMinutes(this)).takeIf { it >= 0 } ?: 2
-        leadSpinner.adapter = themedSpinnerAdapter(leadLabels, t.ink)
-        leadSpinner.setSelection(leadIndex, false)
-
-        val keys = Themes.all.keys.toList()
-        val themeLabels = keys.map { Themes.labels[it] ?: it }
-        val themeIndex = keys.indexOf(currentThemeKey).takeIf { it >= 0 } ?: 0
-        themeSpinner.adapter = themedSpinnerAdapter(themeLabels, t.ink)
-        themeSpinner.setSelection(themeIndex, false)
-    }
-
-    private fun themedSpinnerAdapter(items: List<String>, textColor: Int): ArrayAdapter<String> {
-        val adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, items) {
-            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
-                val v = super.getView(position, convertView, parent)
-                (v as? TextView)?.setTextColor(textColor)
-                return v
-            }
-            override fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
-                val v = super.getDropDownView(position, convertView, parent)
-                // Now that the popup itself is explicitly given the
-                // theme's panel color as its background (see
-                // restyleSpinners), the same ink color used everywhere
-                // else against that panel color stays correctly
-                // readable here too — no more guessing at a fixed
-                // black/white that might clash with whatever the popup
-                // actually renders as.
-                (v as? TextView)?.setTextColor(textColor)
-                return v
-            }
-        }
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        return adapter
-    }
-
-    private fun applyTheme(key: String) {
-        val t = Themes.all.getValue(key)
-
-        findViewById<View>(R.id.outerRoot).setBackgroundColor(t.bg)
-        findViewById<View>(R.id.scheduleScroll).setBackgroundColor(t.bg)
-        findViewById<View>(R.id.todoScroll).setBackgroundColor(t.bg)
-        findViewById<View>(R.id.rootLayout).setBackgroundColor(t.bg)
-        findViewById<View>(R.id.boardCard).background = rounded(t.panel2, 10f, t.accent)
-        findViewById<TextView>(R.id.titleText).setTextColor(t.accent)
-        findViewById<TextView>(R.id.semesterLabel).setTextColor(t.slate)
-        findViewById<TextView>(R.id.statusLine).setTextColor(t.slate)
-
-        val enableBtn = findViewById<android.widget.Button>(R.id.enableBtn)
-        enableBtn.backgroundTintList = null
-        enableBtn.background = rounded(t.accent, 8f)
-        enableBtn.setTextColor(t.accentText)
-
-        val manageToggleBtn = findViewById<android.widget.Button>(R.id.manageToggleBtn)
-        manageToggleBtn.backgroundTintList = null
-        manageToggleBtn.background = rounded(t.panel, 8f)
-        manageToggleBtn.setTextColor(t.ink)
-
-        val addBtn = findViewById<android.widget.Button>(R.id.addBtn)
-        addBtn.backgroundTintList = null
-        addBtn.background = rounded(t.panel, 8f)
-        addBtn.setTextColor(t.ink)
-
-        val exportBtn = findViewById<android.widget.Button>(R.id.exportBtn)
-        exportBtn.backgroundTintList = null
-        exportBtn.background = rounded(t.panel, 8f)
-        exportBtn.setTextColor(t.ink)
-
-        val importBtn = findViewById<android.widget.Button>(R.id.importBtn)
-        importBtn.backgroundTintList = null
-        importBtn.background = rounded(t.panel, 8f)
-        importBtn.setTextColor(t.ink)
-
-        val resetBtn = findViewById<android.widget.Button>(R.id.resetBtn)
-        resetBtn.backgroundTintList = null
-        resetBtn.background = rounded(t.panel, 8f)
-
-        restyleSpinners(t)
-
-        // To-Do tab
-        findViewById<TextView>(R.id.todoTitleText).setTextColor(t.accent)
-        findViewById<TextView>(R.id.todoSubText).setTextColor(t.slate)
-        findViewById<TextView>(R.id.todoEmptyText).setTextColor(t.slate)
-        val addTodoBtn = findViewById<android.widget.Button>(R.id.addTodoBtn)
-        addTodoBtn.backgroundTintList = null
-        addTodoBtn.background = rounded(t.accent, 8f)
-        addTodoBtn.setTextColor(t.accentText)
-
-        // Bottom navigation
-        val bottomNav = findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.bottomNav)
-        bottomNav.setBackgroundColor(t.panel)
-        val navColors = android.content.res.ColorStateList(
-            arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf(-android.R.attr.state_checked)),
-            intArrayOf(t.accent, t.slate)
-        )
-        bottomNav.itemIconTintList = navColors
-        bottomNav.itemTextColor = navColors
-
-        adapter.updateTheme(t)
-        updateNextUp()
-        updateWeekList()
-        updateTodoList()
-    }
-
-    // ---------------- Next up (flap row) ----------------
-
-    private fun updateNextUp() {
-        val t = Themes.all.getValue(currentThemeKey)
-        val row = findViewById<LinearLayout>(R.id.nextUpFlapRow)
+    /** One tab per schedule, then a tab that creates a new one. */
+    private fun renderTabs() {
+        val row = v<LinearLayout>(R.id.tabRow)
+        val scroll = v<HorizontalScrollView>(R.id.tabScroll)
         row.removeAllViews()
+        show(scroll, schedules.isNotEmpty())
 
-        val schedule = ScheduleStore.getSchedule(this)
-        if (schedule.isEmpty()) {
-            addFlap(row, t, "STATUS", "Add a class below")
-            return
+        var selectedTab: View? = null
+        schedules.forEach { schedule ->
+            val selected = schedule.id == activeId
+            val name = schedule.name.ifBlank { "Untitled schedule" }
+            val tab = makeTab(name, selected, outlined = false)
+            tab.contentDescription = if (selected) "$name, selected" else name
+            tab.setOnClickListener { selectSchedule(schedule.id) }
+            tab.setOnLongClickListener {
+                editSchedule(schedule)
+                true
+            }
+            row.addView(tab)
+            if (selected) selectedTab = tab
         }
 
-        var soonestEntry: ScheduleEntry? = null
-        var soonestTime: Calendar? = null
-        schedule.forEach { entry ->
-            val at = ScheduleStore.nextOccurrence(entry)
-            if (soonestTime == null || at.before(soonestTime)) {
-                soonestTime = at
-                soonestEntry = entry
+        val add = makeTab("+ New", selected = false, outlined = true)
+        add.contentDescription = "New schedule"
+        add.setOnClickListener { createSchedule() }
+        row.addView(add)
+
+        val target = selectedTab
+        if (target != null) {
+            scroll.post { scroll.smoothScrollTo((target.left - dp(16f)).coerceAtLeast(0), 0) }
+        }
+    }
+
+    private fun makeTab(label: String, selected: Boolean, outlined: Boolean): TextView {
+        val t = theme
+        val tab = TextView(this)
+        tab.text = label
+        tab.textSize = 14f
+        tab.typeface = medium
+        tab.gravity = Gravity.CENTER
+        tab.maxLines = 1
+        tab.ellipsize = TextUtils.TruncateAt.END
+        tab.maxWidth = dp(220f)
+        tab.minWidth = dp(64f)
+        tab.setPadding(dp(18f), 0, dp(18f), 0)
+        when {
+            selected -> {
+                tab.background = Ui.pressable(this, t.accent, 24f, t.accentText)
+                tab.setTextColor(t.accentText)
+            }
+            outlined -> {
+                tab.background = Ui.pressable(this, Color.TRANSPARENT, 24f, t.ink, t.line)
+                tab.setTextColor(t.slate)
+            }
+            else -> {
+                tab.background = Ui.pressable(this, t.panel, 24f, t.ink)
+                tab.setTextColor(t.ink)
             }
         }
-        val entry = soonestEntry ?: return
-        val at = soonestTime ?: return
-
-        val diffMin = ((at.timeInMillis - System.currentTimeMillis()) / 60000).coerceAtLeast(0)
-        val h = diffMin / 60
-        val m = diffMin % 60
-        val countdown = if (h > 0) "${h}h ${m}m" else "${m}m"
-
-        addFlap(row, t, "SUBJECT", entry.subject, wide = true)
-        addFlap(row, t, "DAY", dayNames[entry.day])
-        addFlap(row, t, "TIME", fmt12(entry.start))
-        if (entry.room.isNotBlank()) addFlap(row, t, "ROOM", entry.room)
-        addFlap(row, t, "STARTS IN", countdown)
+        val params = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48f))
+        params.marginEnd = dp(8f)
+        tab.layoutParams = params
+        return tab
     }
 
-    private fun addFlap(row: LinearLayout, t: ThemeColors, key: String, value: String, wide: Boolean = false) {
-        val view = layoutInflater.inflate(R.layout.item_flap, row, false)
-        val bg = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = 6f * resources.displayMetrics.density
-            setColor(t.panel)
+    /** A strip that only appears when alerts can't currently reach
+     *  the user, with a one-tap fix. */
+    private fun renderAlertBanner() {
+        val banner = v<View>(R.id.alertBanner)
+        val s = active
+        bannerMode = when {
+            s == null || s.entries.isEmpty() -> BANNER_NONE
+            !s.alertsEnabled -> BANNER_MUTED
+            !alertsReady() -> BANNER_PERMISSION
+            else -> BANNER_NONE
         }
-        view.background = bg
-        if (wide) view.minimumWidth = (150 * resources.displayMetrics.density).toInt()
-        view.findViewById<TextView>(R.id.flapKey).apply {
-            text = key
-            setTextColor(t.slate)
+        show(banner, bannerMode != BANNER_NONE)
+        if (bannerMode == BANNER_NONE) return
+
+        banner.background = Ui.rounded(this, Themes.blend(theme.bg, theme.accent, 0.14f), 16f)
+        v<TextView>(R.id.bannerText).text = if (bannerMode == BANNER_MUTED) {
+            "Alerts are switched off for this schedule."
+        } else {
+            "Alerts can't reach you until notifications are allowed."
         }
-        view.findViewById<TextView>(R.id.flapValue).apply {
-            text = value
-            setTextColor(t.accent)
-        }
-        row.addView(view)
     }
 
-    // ---------------- Week list (read-only) ----------------
+    private fun onBannerAction() {
+        val s = active
+        if (bannerMode == BANNER_MUTED && s != null) {
+            ScheduleStore.updateSchedule(this, s.copy(alertsEnabled = true))
+            AlarmScheduler.scheduleAll(this)
+            refresh()
+        } else if (bannerMode == BANNER_PERMISSION) {
+            requestNotificationsAndAlarms()
+        }
+    }
 
-    private fun updateWeekList() {
-        val t = Themes.all.getValue(currentThemeKey)
-        val container = findViewById<LinearLayout>(R.id.weekListContainer)
-        container.removeAllViews()
+    /** The class happening now, or else the soonest one coming up. */
+    private fun renderNextUp() {
+        val card = v<View>(R.id.nextCard)
+        val s = active
+        if (s == null || s.entries.isEmpty()) {
+            show(card, false)
+            return
+        }
+        show(card, true)
 
-        val schedule = ScheduleStore.getSchedule(this)
+        val now = System.currentTimeMillis()
+        val soonest = s.entries
+            .map { it to ScheduleMath.occurrence(it, now) }
+            .minByOrNull { it.second.startAt } ?: return
+        val entry = soonest.first
+        val occurrence = soonest.second
+        val live = occurrence.startAt <= now
+
+        val t = theme
+        val soft = Themes.blend(t.accentText, t.accent, 0.28f)
+        card.background = Ui.rounded(this, t.accent, 22f)
+
+        val label = v<TextView>(R.id.nextLabel)
+        label.text = if (live) "HAPPENING NOW" else "NEXT UP"
+        label.setTextColor(soft)
+
+        val subject = v<TextView>(R.id.nextSubject)
+        subject.text = entry.subject.ifBlank { "Class" }
+        subject.setTextColor(t.accentText)
+
+        val meta = v<TextView>(R.id.nextMeta)
+        meta.text = listOf(
+            ScheduleMath.DAY_LONG[entry.day],
+            ScheduleMath.timeRange(entry),
+            entry.room,
+            entry.teacher
+        ).filter { it.isNotBlank() }.joinToString("  ·  ")
+        meta.setTextColor(soft)
+
+        val countdown = v<TextView>(R.id.nextCountdown)
+        countdown.text = if (live) {
+            "Ends in ${ScheduleMath.countdown(occurrence.endAt - now)}"
+        } else {
+            "Starts in ${ScheduleMath.countdown(occurrence.startAt - now)}"
+        }
+        countdown.setTextColor(t.accent)
+        countdown.background = Ui.rounded(this, t.accentText, 20f)
+    }
+
+    /** The open schedule's week, as a table or a list. */
+    private fun renderWeek() {
+        val s = active
+        show(v(R.id.noScheduleState), s == null)
+        show(v(R.id.scheduleContent), s != null)
+        if (s == null) return
+
+        val entries = s.entries
+        val empty = entries.isEmpty()
+        val asTable = ScheduleStore.getViewMode(this) == ScheduleStore.VIEW_TABLE
+
+        show(v(R.id.emptyClasses), empty)
+        show(v(R.id.weekHeader), !empty)
+        show(v(R.id.tableCard), !empty && asTable)
+        show(v(R.id.listContainer), !empty && !asTable)
+
+        styleToggle(v(R.id.tableToggle), asTable)
+        styleToggle(v(R.id.listToggle), !asTable)
+
+        v<TimetableView>(R.id.timetable).setData(entries, theme)
+        renderList(entries)
+    }
+
+    private fun styleToggle(toggle: TextView, on: Boolean) {
+        toggle.background =
+            if (on) Ui.rounded(this, theme.accent, 11f)
+            else Ui.pressable(this, Color.TRANSPARENT, 11f, theme.ink)
+        toggle.setTextColor(if (on) theme.accentText else theme.slate)
+        toggle.isSelected = on
+    }
+
+    private fun renderList(entries: List<ScheduleEntry>) {
+        val t = theme
+        val list = v<LinearLayout>(R.id.listContainer)
+        list.removeAllViews()
+
+        val order = ScheduleMath.subjectOrder(entries)
         val today = Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1
 
-        for (offset in 0..6) {
-            val dayIdx = (today + offset) % 7
-            val entries = schedule.filter { it.day == dayIdx }.sortedBy { it.start }
-            if (entries.isEmpty()) continue
+        ScheduleMath.WEEK_ORDER.forEach { day ->
+            val dayEntries = entries.filter { it.day == day }.sortedBy { ScheduleMath.startMinutes(it) }
+            if (dayEntries.isEmpty()) return@forEach
 
-            val header = TextView(this).apply {
-                text = if (offset == 0) "${dayNames[dayIdx]} · Today" else dayNames[dayIdx]
-                setTextColor(if (offset == 0) t.accent else t.slate)
-                textSize = 12f
-                typeface = android.graphics.Typeface.MONOSPACE
-                letterSpacing = 0.1f
-                setPadding(0, (16 * resources.displayMetrics.density).toInt(), 0, (6 * resources.displayMetrics.density).toInt())
-            }
-            container.addView(header)
+            val header = TextView(this)
+            header.text = if (day == today) "${ScheduleMath.DAY_LONG[day]}  ·  Today" else ScheduleMath.DAY_LONG[day]
+            header.textSize = 14f
+            header.typeface = medium
+            header.setTextColor(if (day == today) t.accent else t.slate)
+            header.setPadding(dp(4f), dp(if (list.childCount == 0) 2f else 14f), 0, dp(8f))
+            list.addView(header)
 
-            entries.forEach { entry ->
-                val row = layoutInflater.inflate(R.layout.item_week_row, container, false)
-                row.findViewById<TextView>(R.id.weekRowTime).apply {
-                    text = "${fmt12(entry.start)}\n${fmt12(entry.end)}"
-                    setTextColor(t.slate)
-                }
-                row.findViewById<TextView>(R.id.weekRowSubject).apply {
-                    text = entry.subject
-                    setTextColor(t.ink)
-                }
-                row.findViewById<TextView>(R.id.weekRowMeta).apply {
-                    text = listOf(entry.room, entry.teacher).filter { it.isNotBlank() }.joinToString(" · ")
-                    setTextColor(t.slate)
-                }
-                container.addView(row)
+            dayEntries.forEach { entry ->
+                val row = layoutInflater.inflate(R.layout.item_class_row, list, false)
+                row.background = Ui.pressable(this, t.panel, 16f, t.ink)
+                row.clipToOutline = true
+
+                val index = order[ScheduleMath.subjectKey(entry.subject)] ?: 0
+                row.findViewById<View>(R.id.classRowStripe).setBackgroundColor(Themes.subjectColor(index))
+
+                val time = row.findViewById<TextView>(R.id.classRowTime)
+                time.text = ScheduleMath.fmt12(entry.start) + "\n" + ScheduleMath.fmt12(entry.end)
+                time.setTextColor(t.slate)
+
+                val subject = row.findViewById<TextView>(R.id.classRowSubject)
+                subject.text = entry.subject.ifBlank { "Class" }
+                subject.setTextColor(t.ink)
+
+                val meta = row.findViewById<TextView>(R.id.classRowMeta)
+                val details = listOf(entry.room, entry.teacher).filter { it.isNotBlank() }.joinToString("  ·  ")
+                meta.text = details
+                meta.setTextColor(t.slate)
+                show(meta, details.isNotEmpty())
+
+                row.setOnClickListener { editClass(entry) }
+                list.addView(row)
             }
         }
     }
 
-    private fun fmt12(hhmm: String): String {
-        val (h, m) = hhmm.split(":").map { it.toInt() }
-        val period = if (h >= 12) "PM" else "AM"
-        val hour12 = if (h % 12 == 0) 12 else h % 12
-        return String.format("%d:%02d %s", hour12, m, period)
+    private fun renderFab() {
+        val fab = v<TextView>(R.id.addClassFab)
+        show(fab, !settingsOpen && active != null)
+        fab.background = Ui.pressable(this, theme.accent, 28f, theme.accentText)
+        fab.setTextColor(theme.accentText)
+        fab.compoundDrawableTintList = ColorStateList.valueOf(theme.accentText)
     }
 
-    // ---------------- Lead time ----------------
+    private fun renderSettings() {
+        val t = theme
+        val notifsOn = NotificationManagerCompat.from(this).areNotificationsEnabled()
+        val ready = alertsReady()
 
-    private fun setupLeadSpinner() {
-        val spinner = findViewById<Spinner>(R.id.leadSpinner)
-        spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val minutes = leadOptions[position]
-                if (minutes != ScheduleStore.getLeadMinutes(this@MainActivity)) {
-                    ScheduleStore.setLeadMinutes(this@MainActivity, minutes)
-                    AlarmScheduler.scheduleAll(this@MainActivity)
-                }
+        v<TextView>(R.id.alertStatus).text = when {
+            ready -> "Alerts are on. They are set with the phone's own alarm system, so they arrive even when this app is closed."
+            notifsOn -> "Notifications are allowed, but exact alarms are not, so alerts may arrive late."
+            else -> "Notifications are not allowed yet, so alerts can't be shown."
+        }
+        show(v(R.id.enableBtn), !ready)
+
+        val lead = ScheduleStore.getLeadMinutes(this)
+        val repeat = ScheduleStore.getRepeatMinutes(this)
+        v<TextView>(R.id.leadValue).text = "$lead min before"
+        v<TextView>(R.id.repeatValue).text = if (repeat <= 0) "Off" else "$repeat min"
+
+        val summary = v<TextView>(R.id.alertSummary)
+        summary.text = ScheduleMath.alertSummary(lead, repeat)
+        summary.setTextColor(t.ink)
+        summary.background = Ui.rounded(this, Themes.blend(t.panel, t.accent, 0.14f), 14f)
+
+        renderThemeRow()
+    }
+
+    private fun renderThemeRow() {
+        val row = v<LinearLayout>(R.id.themeRow)
+        row.removeAllViews()
+        Themes.all.forEach { (key, colors) ->
+            val selected = key == themeKey
+            val label = Themes.labels[key] ?: key
+            // Each swatch previews a theme: its background with a dot
+            // of its accent colour.
+            val ring = Ui.oval(colors.bg, if (selected) theme.accent else theme.line, dp(if (selected) 3f else 1.5f))
+            val dot = InsetDrawable(Ui.oval(colors.accent), dp(13f))
+            val swatch = View(this)
+            swatch.background = LayerDrawable(arrayOf(ring, dot))
+            swatch.contentDescription = if (selected) "$label, selected" else label
+            swatch.setOnClickListener {
+                themeKey = key
+                theme = Themes.get(key)
+                Themes.save(this, key)
+                refresh()
             }
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+            val params = LinearLayout.LayoutParams(dp(48f), dp(48f))
+            params.marginEnd = dp(12f)
+            row.addView(swatch, params)
+        }
+        v<TextView>(R.id.themeName).text = Themes.labels[themeKey] ?: themeKey
+    }
+
+    // ---------------- Schedules ----------------
+
+    private fun selectSchedule(id: String) {
+        ScheduleStore.setActiveId(this, id)
+        refresh()
+    }
+
+    private fun setViewMode(mode: String) {
+        ScheduleStore.setViewMode(this, mode)
+        refresh()
+    }
+
+    private fun createSchedule() {
+        dialogs.scheduleForm(null) { name, note, alertsEnabled ->
+            val created = ScheduleStore.addSchedule(this, name, note, alertsEnabled)
+            ScheduleStore.setActiveId(this, created.id)
+            refresh()
         }
     }
 
-    // ---------------- Notifications & exact alarm permission ----------------
+    private fun editSchedule(schedule: Schedule) {
+        dialogs.scheduleForm(schedule) { name, note, alertsEnabled ->
+            // Re-read it so classes added since the dialog opened
+            // aren't overwritten.
+            val current = ScheduleStore.getSchedules(this).firstOrNull { it.id == schedule.id } ?: schedule
+            ScheduleStore.updateSchedule(this, current.copy(name = name, note = note, alertsEnabled = alertsEnabled))
+            AlarmScheduler.scheduleAll(this)
+            refresh()
+        }
+    }
+
+    private fun showScheduleMenu() {
+        val s = active ?: return
+        dialogs.actions(
+            s.name.ifBlank { "Untitled schedule" },
+            listOf(
+                Dialogs.Action("Edit name and alerts") { editSchedule(s) },
+                Dialogs.Action("Duplicate") { duplicateSchedule(s) },
+                Dialogs.Action("Delete schedule", danger = true) { confirmDeleteSchedule(s) }
+            )
+        )
+    }
+
+    private fun duplicateSchedule(schedule: Schedule) {
+        val copy = ScheduleStore.duplicateSchedule(this, schedule.id) ?: return
+        ScheduleStore.setActiveId(this, copy.id)
+        AlarmScheduler.scheduleAll(this)
+        refresh()
+    }
+
+    private fun confirmDeleteSchedule(schedule: Schedule) {
+        val count = schedule.entries.size
+        val name = schedule.name.ifBlank { "this schedule" }
+        val what = when (count) {
+            0 -> "It has no classes."
+            1 -> "Its 1 class and that class's alerts go with it."
+            else -> "Its $count classes and their alerts go with it."
+        }
+        dialogs.confirm("Delete $name?", "$what This can't be undone.", "Delete") {
+            schedule.entries.forEach { AlarmScheduler.cancelOne(this, it.id) }
+            ScheduleStore.deleteSchedule(this, schedule.id)
+            refresh()
+        }
+    }
+
+    // ---------------- Classes ----------------
+
+    private fun addClass() {
+        val s = active
+        if (s == null) {
+            createSchedule()
+            return
+        }
+        val today = Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1
+        dialogs.classForm(null, today, null) { entries ->
+            ScheduleStore.upsertEntries(this, s.id, entries)
+            AlarmScheduler.scheduleAll(this)
+            refresh()
+        }
+    }
+
+    private fun editClass(entry: ScheduleEntry) {
+        val s = active ?: return
+        dialogs.classForm(
+            entry,
+            entry.day,
+            onDelete = {
+                AlarmScheduler.cancelOne(this, entry.id)
+                ScheduleStore.deleteEntry(this, s.id, entry.id)
+                refresh()
+            }
+        ) { entries ->
+            // Clear the old timing first so an alert for the previous
+            // time can't linger.
+            AlarmScheduler.cancelOne(this, entry.id)
+            ScheduleStore.upsertEntries(this, s.id, entries)
+            AlarmScheduler.scheduleAll(this)
+            refresh()
+        }
+    }
+
+    // ---------------- Alert timing ----------------
+
+    private fun stepLead(direction: Int) {
+        val next = ScheduleMath.stepLead(ScheduleStore.getLeadMinutes(this), direction, ScheduleStore.MAX_LEAD_MINUTES)
+        setAlertTiming(next, ScheduleStore.getRepeatMinutes(this))
+    }
+
+    private fun stepRepeat(direction: Int) {
+        val lead = ScheduleStore.getLeadMinutes(this)
+        setAlertTiming(lead, ScheduleMath.stepRepeat(ScheduleStore.getRepeatMinutes(this), direction, lead))
+    }
+
+    /** Saves both alert settings together and re-arms every alarm.
+     *  The repeat interval is kept shorter than the lead time. */
+    private fun setAlertTiming(leadMinutes: Int, repeatMinutes: Int) {
+        val lead = leadMinutes.coerceIn(1, ScheduleStore.MAX_LEAD_MINUTES)
+        ScheduleStore.setLeadMinutes(this, lead)
+        ScheduleStore.setRepeatMinutes(this, ScheduleMath.clampRepeat(repeatMinutes, lead))
+        AlarmScheduler.scheduleAll(this)
+        renderSettings()
+    }
+
+    // ---------------- Notification & exact-alarm permission ----------------
+
+    private fun exactAlarmsAllowed(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+        } else {
+            true
+        }
+
+    private fun alertsReady(): Boolean =
+        NotificationManagerCompat.from(this).areNotificationsEnabled() && exactAlarmsAllowed()
 
     private fun requestNotificationsAndAlarms() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-        } else {
-            proceedAfterNotifPermission()
+        val enabled = NotificationManagerCompat.from(this).areNotificationsEnabled()
+        when {
+            enabled -> proceedAfterNotifPermission()
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
+                notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            else -> openNotificationSettings()
+        }
+    }
+
+    private fun openNotificationSettings() {
+        try {
+            startActivity(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            )
+            toast("Allow notifications for Class Board, then come back.")
+        } catch (e: Exception) {
+            toast("Open your phone's settings and allow notifications for Class Board.")
         }
     }
 
     private fun proceedAfterNotifPermission() {
         NotificationHelper.ensureChannel(this)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val alarmManager = getSystemService(AlarmManager::class.java)
-            if (!alarmManager.canScheduleExactAlarms()) {
-                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                    data = Uri.parse("package:$packageName")
-                }
-                startActivity(intent)
-                Toast.makeText(this, "Please allow exact alarms on the next screen, then come back.", Toast.LENGTH_LONG).show()
+        if (!exactAlarmsAllowed()) {
+            try {
+                startActivity(
+                    Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName"))
+                )
+                toast("Allow exact alarms on the next screen, then come back.")
+            } catch (e: Exception) {
+                toast("Alerts are on, but may arrive a little late on this phone.")
             }
+        } else {
+            toast("Alerts are on.")
         }
         AlarmScheduler.scheduleAll(this)
-        updateStatusLine()
-        Toast.makeText(this, "Reminders are on.", Toast.LENGTH_SHORT).show()
+        refresh()
     }
 
-    private fun updateStatusLine() {
-        val statusLine = findViewById<TextView>(R.id.statusLine)
-        val notifsEnabled = androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled()
-        val exactOk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
-        } else true
-
-        statusLine.text = when {
-            notifsEnabled && exactOk -> "Notifications: enabled — reminders are scheduled with the OS directly"
-            notifsEnabled && !exactOk -> "Notifications: on, but exact-alarm permission is still needed"
-            else -> "Notifications: not enabled yet"
-        }
-    }
-
-    // ---------------- Add / edit / delete ----------------
-
-    private fun showEntryDialog(existing: ScheduleEntry?) {
-        val view = android.view.LayoutInflater.from(themedContext()).inflate(R.layout.dialog_add_entry, null)
-        val subjectInput = view.findViewById<EditText>(R.id.subjectInput)
-        val roomInput = view.findViewById<EditText>(R.id.roomInput)
-        val teacherInput = view.findViewById<EditText>(R.id.teacherInput)
-        val daySpinner = view.findViewById<Spinner>(R.id.daySpinner)
-        val startBtn = view.findViewById<android.widget.Button>(R.id.startTimeBtn)
-        val endBtn = view.findViewById<android.widget.Button>(R.id.endTimeBtn)
-
-        daySpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, dayNames)
-
-        var startTime = existing?.start ?: "08:00"
-        var endTime = existing?.end ?: "09:00"
-
-        fun refreshTimeButtons() {
-            startBtn.text = "Start: $startTime"
-            endBtn.text = "End: $endTime"
-        }
-        refreshTimeButtons()
-
-        startBtn.setOnClickListener {
-            val (h, m) = startTime.split(":").map { it.toInt() }
-            TimePickerDialog(this, { _, hh, mm ->
-                startTime = String.format("%02d:%02d", hh, mm)
-                refreshTimeButtons()
-            }, h, m, true).show()
-        }
-        endBtn.setOnClickListener {
-            val (h, m) = endTime.split(":").map { it.toInt() }
-            TimePickerDialog(this, { _, hh, mm ->
-                endTime = String.format("%02d:%02d", hh, mm)
-                refreshTimeButtons()
-            }, h, m, true).show()
-        }
-
-        existing?.let {
-            subjectInput.setText(it.subject)
-            roomInput.setText(it.room)
-            teacherInput.setText(it.teacher)
-            daySpinner.setSelection(it.day)
-        }
-
-        AlertDialog.Builder(themedContext())
-            .setTitle(if (existing == null) "Add a class" else "Edit class")
-            .setView(view)
-            .setPositiveButton("Save") { _, _ ->
-                val subject = subjectInput.text.toString().trim()
-                if (subject.isEmpty()) {
-                    Toast.makeText(this, "Subject can't be empty.", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                val entry = ScheduleEntry(
-                    id = existing?.id ?: UUID.randomUUID().toString(),
-                    subject = subject,
-                    room = roomInput.text.toString().trim(),
-                    teacher = teacherInput.text.toString().trim(),
-                    day = daySpinner.selectedItemPosition,
-                    start = startTime,
-                    end = endTime
-                )
-                saveEntry(entry)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun saveEntry(entry: ScheduleEntry) {
-        val list = ScheduleStore.getSchedule(this).toMutableList()
-        val index = list.indexOfFirst { it.id == entry.id }
-        if (index >= 0) list[index] = entry else list.add(entry)
-        ScheduleStore.saveSchedule(this, list)
-        AlarmScheduler.scheduleOne(this, entry)
-        refreshEverything()
-    }
-
-    private fun deleteEntry(entry: ScheduleEntry) {
-        AlarmScheduler.cancelOne(this, entry.id)
-        val list = ScheduleStore.getSchedule(this).toMutableList()
-        list.removeAll { it.id == entry.id }
-        ScheduleStore.saveSchedule(this, list)
-        refreshEverything()
-    }
-
-    private fun refreshList() {
-        adapter.update(ScheduleStore.getSchedule(this).sortedWith(compareBy({ it.day }, { it.start })))
+    companion object {
+        private const val TICK_MS = 30_000L
+        private const val BANNER_NONE = 0
+        private const val BANNER_PERMISSION = 1
+        private const val BANNER_MUTED = 2
     }
 }

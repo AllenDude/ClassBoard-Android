@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One class in the List view. Tapping the row opens it for editing. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/classRowRoot"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="8dp"
+    android:minHeight="64dp"
+    android:orientation="horizontal">
+
+    <View
+        android:id="@+id/classRowStripe"
+        android:layout_width="5dp"
+        android:layout_height="match_parent" />
+
+    <TextView
+        android:id="@+id/classRowTime"
+        android:layout_width="88dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical"
+        android:fontFamily="sans-serif-condensed"
+        android:lineSpacingMultiplier="1.1"
+        android:paddingStart="14dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="12dp"
+        android:textSize="14sp" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:paddingTop="12dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="12dp">
+
+        <TextView
+            android:id="@+id/classRowSubject"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-medium"
+            android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/classRowMeta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textSize="13sp" />
+    </LinearLayout>
+</LinearLayout>

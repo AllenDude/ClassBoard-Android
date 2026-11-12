@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Create / edit a schedule. Colours are applied in code. -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="24dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="8dp">
+
+        <EditText
+            android:id="@+id/scheduleNameInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Schedule name"
+            android:importantForAutofill="no"
+            android:inputType="textCapSentences"
+            android:maxLines="1"
+            android:padding="14dp"
+            android:tag="field"
+            android:textSize="16sp" />
+
+        <EditText
+            android:id="@+id/scheduleNoteInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:hint="Program or section (optional)"
+            android:importantForAutofill="no"
+            android:inputType="textCapSentences"
+            android:maxLines="1"
+            android:padding="14dp"
+            android:tag="field"
+            android:textSize="16sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:tag="ink"
+                    android:text="Send alerts for this schedule"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:tag="slate"
+                    android:text="Turn off for a schedule you are not following right now."
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/alertsSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginStart="12dp"
+                android:minWidth="48dp"
+                android:tag="switch" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/scheduleError"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:tag="danger"
+            android:textSize="14sp"
+            android:visibility="gone" />
+    </LinearLayout>
+</ScrollView>

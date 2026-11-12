@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Add / edit a class. Colours are applied in code. -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="24dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="8dp">
+
+        <EditText
+            android:id="@+id/subjectInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Subject"
+            android:importantForAutofill="no"
+            android:inputType="textCapSentences"
+            android:maxLines="1"
+            android:padding="14dp"
+            android:tag="field"
+            android:textSize="16sp" />
+
+        <EditText
+            android:id="@+id/roomInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:hint="Room (optional)"
+            android:importantForAutofill="no"
+            android:inputType="textCapSentences"
+            android:maxLines="1"
+            android:padding="14dp"
+            android:tag="field"
+            android:textSize="16sp" />
+
+        <EditText
+            android:id="@+id/teacherInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:hint="Teacher (optional)"
+            android:importantForAutofill="no"
+            android:inputType="textCapWords"
+            android:maxLines="1"
+            android:padding="14dp"
+            android:tag="field"
+            android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/daysLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:tag="slate"
+            android:textSize="14sp" />
+
+        <!-- Seven day buttons, Monday first. Added in code. -->
+        <LinearLayout
+            android:id="@+id/dayRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:tag="slate"
+                    android:text="Starts"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/startTimeBtn"
+                    android:layout_width="match_parent"
+                    android:layout_height="50dp"
+                    android:layout_marginTop="8dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:tag="step"
+                    android:textSize="16sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:tag="slate"
+                    android:text="Ends"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/endTimeBtn"
+                    android:layout_width="match_parent"
+                    android:layout_height="50dp"
+                    android:layout_marginTop="8dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:tag="step"
+                    android:textSize="16sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/classError"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:tag="danger"
+            android:textSize="14sp"
+            android:visibility="gone" />
+    </LinearLayout>
+</ScrollView>

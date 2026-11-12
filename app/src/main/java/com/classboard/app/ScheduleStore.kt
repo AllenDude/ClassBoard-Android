@@ -1,179 +1,269 @@
 package com.classboard.app
 
 import android.content.Context
+import android.content.SharedPreferences
 import org.json.JSONArray
-import java.util.Calendar
+import org.json.JSONObject
+import java.util.UUID
 
 /**
- * Everything about saving/loading the schedule and settings on this
+ * Everything about saving/loading schedules and settings on this
  * phone. No server, no internet — just this phone's own storage.
+ *
+ * The app starts with no schedules at all; nothing is pre-filled.
  */
 object ScheduleStore {
     private const val PREFS = "class_board_prefs"
-    private const val KEY_SCHEDULE = "schedule_json"
+
+    private const val KEY_SCHEDULES = "schedules_json"
+    private const val KEY_ACTIVE = "active_schedule_id"
     private const val KEY_LEAD_MINUTES = "lead_minutes"
-    private const val KEY_SEMESTER = "semester_label"
-    private const val KEY_PROGRAM = "program_label"
+    private const val KEY_REPEAT_MINUTES = "repeat_minutes"
+    private const val KEY_VIEW_MODE = "view_mode"
 
-    fun getSchedule(context: Context): MutableList<ScheduleEntry> {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val raw = prefs.getString(KEY_SCHEDULE, null)
-        if (raw == null) {
-            val seed = defaultSchedule()
-            saveSchedule(context, seed)
-            return seed.toMutableList()
-        }
-        val arr = JSONArray(raw)
-        val list = mutableListOf<ScheduleEntry>()
-        for (i in 0 until arr.length()) {
-            list.add(ScheduleEntry.fromJson(arr.getJSONObject(i)))
-        }
-        return list
-    }
+    // Keys written by the single-schedule version of the app. Read once
+    // to carry existing classes over, then removed.
+    private const val LEGACY_SCHEDULE = "schedule_json"
+    private const val LEGACY_SEMESTER = "semester_label"
+    private const val LEGACY_PROGRAM = "program_label"
+    private const val LEGACY_TODOS = "todos_json"
+    private const val LEGACY_PROGRAM_PLACEHOLDER = "Add your program"
 
-    fun saveSchedule(context: Context, entries: List<ScheduleEntry>) {
-        val arr = JSONArray()
-        entries.forEach { arr.put(it.toJson()) }
+    const val MAX_LEAD_MINUTES = 180
+    const val DEFAULT_LEAD_MINUTES = 15
+    const val DEFAULT_REPEAT_MINUTES = 5
+
+    const val VIEW_TABLE = "table"
+    const val VIEW_LIST = "list"
+
+    private fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_SCHEDULE, arr.toString())
-            .apply()
+
+    private fun newId(): String = UUID.randomUUID().toString()
+
+    // ---------------- Schedules ----------------
+
+    fun getSchedules(context: Context): List<Schedule> {
+        val p = prefs(context)
+        val raw = p.getString(KEY_SCHEDULES, null) ?: return migrateLegacy(p)
+        return parseSchedules(raw)
     }
 
+    fun saveSchedules(context: Context, schedules: List<Schedule>) {
+        prefs(context).edit().putString(KEY_SCHEDULES, toJsonArray(schedules).toString()).apply()
+    }
+
+    fun addSchedule(context: Context, name: String, note: String, alertsEnabled: Boolean): Schedule {
+        val schedule = Schedule(newId(), name, note, alertsEnabled, emptyList())
+        saveSchedules(context, getSchedules(context) + schedule)
+        return schedule
+    }
+
+    /** Replaces the stored schedule that has the same id. */
+    fun updateSchedule(context: Context, schedule: Schedule) {
+        saveSchedules(context, getSchedules(context).map { if (it.id == schedule.id) schedule else it })
+    }
+
+    fun deleteSchedule(context: Context, scheduleId: String) {
+        saveSchedules(context, getSchedules(context).filter { it.id != scheduleId })
+    }
+
+    /** Copies a schedule and all its classes under new ids. */
+    fun duplicateSchedule(context: Context, scheduleId: String): Schedule? {
+        val all = getSchedules(context)
+        val source = all.firstOrNull { it.id == scheduleId } ?: return null
+        val copy = source.copy(
+            id = newId(),
+            name = (source.name.ifBlank { "Untitled schedule" } + " copy"),
+            entries = source.entries.map { it.copy(id = newId()) }
+        )
+        saveSchedules(context, all + copy)
+        return copy
+    }
+
+    // ---------------- Classes ----------------
+
+    /** Adds each class to the schedule, or replaces the one that
+     *  already has its id. */
+    fun upsertEntries(context: Context, scheduleId: String, entries: List<ScheduleEntry>) {
+        saveSchedules(context, getSchedules(context).map { schedule ->
+            if (schedule.id != scheduleId) {
+                schedule
+            } else {
+                val merged = schedule.entries.toMutableList()
+                entries.forEach { entry ->
+                    val index = merged.indexOfFirst { it.id == entry.id }
+                    if (index >= 0) merged[index] = entry else merged.add(entry)
+                }
+                schedule.copy(entries = merged)
+            }
+        })
+    }
+
+    fun deleteEntry(context: Context, scheduleId: String, entryId: String) {
+        saveSchedules(context, getSchedules(context).map { schedule ->
+            if (schedule.id != scheduleId) schedule
+            else schedule.copy(entries = schedule.entries.filter { it.id != entryId })
+        })
+    }
+
+    /** The class with this id and the schedule it belongs to. */
+    fun findEntry(context: Context, entryId: String): Pair<Schedule, ScheduleEntry>? {
+        getSchedules(context).forEach { schedule ->
+            val entry = schedule.entries.firstOrNull { it.id == entryId }
+            if (entry != null) return schedule to entry
+        }
+        return null
+    }
+
+    // ---------------- Settings ----------------
+
+    fun getActiveId(context: Context): String? = prefs(context).getString(KEY_ACTIVE, null)
+
+    fun setActiveId(context: Context, scheduleId: String?) {
+        prefs(context).edit().putString(KEY_ACTIVE, scheduleId).apply()
+    }
+
+    /** How many minutes before a class its alerts begin. */
     fun getLeadMinutes(context: Context): Int =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getInt(KEY_LEAD_MINUTES, 15)
+        prefs(context).getInt(KEY_LEAD_MINUTES, DEFAULT_LEAD_MINUTES).coerceIn(1, MAX_LEAD_MINUTES)
 
     fun setLeadMinutes(context: Context, minutes: Int) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putInt(KEY_LEAD_MINUTES, minutes).apply()
+        prefs(context).edit().putInt(KEY_LEAD_MINUTES, minutes.coerceIn(1, MAX_LEAD_MINUTES)).apply()
     }
 
-    fun getSemesterLabel(context: Context): String =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_SEMESTER, "1st Sem") ?: "1st Sem"
+    /** How often alerts repeat until the class starts. 0 = no repeat. */
+    fun getRepeatMinutes(context: Context): Int =
+        prefs(context).getInt(KEY_REPEAT_MINUTES, DEFAULT_REPEAT_MINUTES).coerceIn(0, MAX_LEAD_MINUTES)
 
-    fun setSemesterLabel(context: Context, label: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_SEMESTER, label).apply()
+    fun setRepeatMinutes(context: Context, minutes: Int) {
+        prefs(context).edit().putInt(KEY_REPEAT_MINUTES, minutes.coerceIn(0, MAX_LEAD_MINUTES)).apply()
     }
 
-    fun getProgramLabel(context: Context): String =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_PROGRAM, "Add your program in Settings ›") ?: "Add your program in Settings ›"
+    fun getViewMode(context: Context): String =
+        if (prefs(context).getString(KEY_VIEW_MODE, VIEW_TABLE) == VIEW_LIST) VIEW_LIST else VIEW_TABLE
 
-    fun setProgramLabel(context: Context, label: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_PROGRAM, label).apply()
+    fun setViewMode(context: Context, mode: String) {
+        prefs(context).edit().putString(KEY_VIEW_MODE, mode).apply()
     }
 
-    /** The next real moment (as a Calendar) this class meeting happens,
-     *  measured entirely in this phone's own local time — no timezone
-     *  math needed at all, since it never leaves the phone. */
-    /** Midnight on the Sunday that starts the calendar week containing
-     *  `from` (defaults to right now). */
-    fun startOfWeek(from: Calendar = Calendar.getInstance()): Calendar {
-        val c = from.clone() as Calendar
-        c.set(Calendar.HOUR_OF_DAY, 0)
-        c.set(Calendar.MINUTE, 0)
-        c.set(Calendar.SECOND, 0)
-        c.set(Calendar.MILLISECOND, 0)
-        val dow = c.get(Calendar.DAY_OF_WEEK) - 1 // 0=Sun..6=Sat, matches entry.day
-        c.add(Calendar.DAY_OF_YEAR, -dow)
-        return c
-    }
+    // ---------------- Backup ----------------
 
-    /** Where this specific class entry falls within the calendar week
-     *  that starts at `weekStart` — used to find "next week's first
-     *  meeting of this subject" precisely, rather than guessing from
-     *  whichever single day happened to be soonest this week. */
-    fun occurrenceInWeek(entry: ScheduleEntry, weekStart: Calendar): Calendar {
-        val c = weekStart.clone() as Calendar
-        c.add(Calendar.DAY_OF_YEAR, entry.day)
-        val (h, m) = entry.start.split(":").map { it.toInt() }
-        c.set(Calendar.HOUR_OF_DAY, h)
-        c.set(Calendar.MINUTE, m)
-        c.set(Calendar.SECOND, 0)
-        c.set(Calendar.MILLISECOND, 0)
-        return c
-    }
-
-    fun nextOccurrence(entry: ScheduleEntry, from: Calendar = Calendar.getInstance()): Calendar {
-        val (h, m) = entry.start.split(":").map { it.toInt() }
-        for (addDays in 0..7) {
-            val candidate = from.clone() as Calendar
-            candidate.add(Calendar.DAY_OF_YEAR, addDays)
-            candidate.set(Calendar.HOUR_OF_DAY, h)
-            candidate.set(Calendar.MINUTE, m)
-            candidate.set(Calendar.SECOND, 0)
-            candidate.set(Calendar.MILLISECOND, 0)
-            if (candidate.get(Calendar.DAY_OF_WEEK) - 1 == entry.day &&
-                candidate.timeInMillis > from.timeInMillis
-            ) {
-                return candidate
-            }
-        }
-        // Fallback: shouldn't happen, but return a week from now.
-        val fallback = from.clone() as Calendar
-        fallback.add(Calendar.DAY_OF_YEAR, 7)
-        return fallback
-    }
-
-    /** Builds a backup file's contents — same shape the web version
-     *  exports, so a backup made on either the website or this app
-     *  can be imported into the other. */
+    /** Every schedule on this phone, as one backup file. */
     fun exportBackupJson(context: Context): String {
-        val obj = org.json.JSONObject()
-        obj.put("semester", getSemesterLabel(context))
-        obj.put("program", getProgramLabel(context))
-        val arr = JSONArray()
-        getSchedule(context).forEach { arr.put(it.toJson()) }
-        obj.put("schedule", arr)
+        val obj = JSONObject()
+        obj.put("app", "class-board")
+        obj.put("version", 2)
         obj.put("exportedAt", java.time.Instant.now().toString())
+        obj.put("schedules", toJsonArray(getSchedules(context)))
         return obj.toString(2)
     }
 
-    /** Returns true on success. Accepts a backup exported from either
-     *  this app or the web version. */
-    fun importBackupJson(context: Context, json: String): Boolean {
-        return try {
-            val obj = org.json.JSONObject(json)
-            val arr = obj.optJSONArray("schedule") ?: return false
-            val list = mutableListOf<ScheduleEntry>()
-            for (i in 0 until arr.length()) {
-                list.add(ScheduleEntry.fromJson(arr.getJSONObject(i)))
+    /**
+     * Adds the schedules found in a backup file next to the ones
+     * already here — nothing existing is replaced. Understands both
+     * the current multi-schedule format and the older single-schedule
+     * one. Returns what was added; empty if the file wasn't a backup.
+     */
+    fun importBackupJson(context: Context, json: String): List<Schedule> {
+        val incoming: List<Schedule> = try {
+            val obj = JSONObject(json)
+            val many = obj.optJSONArray("schedules")
+            val single = obj.optJSONArray("schedule")
+            when {
+                many != null -> parseSchedules(many.toString())
+                single != null -> listOf(
+                    Schedule(
+                        id = "",
+                        name = text(obj, "semester"),
+                        note = text(obj, "program").let {
+                            if (it.startsWith(LEGACY_PROGRAM_PLACEHOLDER)) "" else it
+                        },
+                        alertsEnabled = true,
+                        entries = parseEntries(single.toString())
+                    )
+                )
+                else -> emptyList()
             }
-            saveSchedule(context, list)
-            val sem = obj.optString("semester", "")
-            if (sem.isNotBlank()) setSemesterLabel(context, sem)
-            val prog = obj.optString("program", "")
-            if (prog.isNotBlank()) setProgramLabel(context, prog)
-            true
         } catch (e: Exception) {
-            false
+            emptyList()
         }
+        if (incoming.isEmpty()) return emptyList()
+
+        // Fresh ids throughout, so importing the same file twice (or a
+        // backup of schedules that are still here) can't collide.
+        val fresh = incoming.map { schedule ->
+            schedule.copy(
+                id = newId(),
+                name = schedule.name.ifBlank { "Imported schedule" },
+                entries = schedule.entries.map { it.copy(id = newId()) }
+            )
+        }
+        saveSchedules(context, getSchedules(context) + fresh)
+        return fresh
     }
 
-    fun resetToDefault(context: Context) {
-        saveSchedule(context, defaultSchedule())
+    // ---------------- Internals ----------------
+
+    private fun toJsonArray(schedules: List<Schedule>): JSONArray {
+        val arr = JSONArray()
+        schedules.forEach { arr.put(it.toJson()) }
+        return arr
     }
 
-    private fun defaultSchedule(): List<ScheduleEntry> = listOf(
-        ScheduleEntry("d1", "Purposive Communication", "R3", "Lopez, Rizza Mae Carlos", 1, "10:00", "11:30"),
-        ScheduleEntry("d2", "Purposive Communication", "R3", "Lopez, Rizza Mae Carlos", 5, "10:00", "11:30"),
-        ScheduleEntry("d3", "Intro to Computing", "R1", "Ancheta, Verson Labuguen", 2, "12:00", "13:00"),
-        ScheduleEntry("d4", "Intro to Computing", "R1", "Ancheta, Verson Labuguen", 3, "12:00", "13:00"),
-        ScheduleEntry("d5", "Intro to Computing (Lab)", "CSS Lab", "Ancheta, Verson Labuguen", 4, "07:00", "10:00"),
-        ScheduleEntry("d6", "Climate Change & DRRM", "R3", "Montemayor, Joannalyn Sapon", 1, "15:00", "17:00"),
-        ScheduleEntry("d7", "Gender and Society", "R4", "Mateo, Jhamie Tetz Infante", 3, "07:00", "08:30"),
-        ScheduleEntry("d8", "Gender and Society", "R4", "Mateo, Jhamie Tetz Infante", 5, "07:00", "08:30"),
-        ScheduleEntry("d9", "Fundamentals of Programming", "R6", "Feliciano, Catleen Glo Madayag", 5, "14:00", "16:00"),
-        ScheduleEntry("d10", "Fundamentals of Programming (Lab)", "CL1", "Feliciano, Catleen Glo Madayag", 1, "07:00", "10:00"),
-        ScheduleEntry("d11", "Mathematics in the Modern World", "R3", "Pua, Marianne Jane Antoinette D", 2, "13:00", "14:30"),
-        ScheduleEntry("d12", "Mathematics in the Modern World", "R3", "Pua, Marianne Jane Antoinette D", 4, "13:00", "14:30"),
-        ScheduleEntry("d13", "Health and Wellness Science", "Gym", "", 2, "14:30", "16:00"),
-        ScheduleEntry("d14", "Health and Wellness Science", "Gym", "", 4, "14:30", "16:00"),
-        ScheduleEntry("d15", "NSTP 1", "", "Valdez, Jean Manganip", 6, "08:00", "11:00"),
-        ScheduleEntry("d16", "PE 1 — Movement Patterns", "Gym", "Hiloma, Jan Michael Vincent Franco", 3, "13:00", "15:00")
-    )
+    private fun parseSchedules(raw: String): List<Schedule> = try {
+        val arr = JSONArray(raw)
+        val out = mutableListOf<Schedule>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            out.add(Schedule.fromJson(o))
+        }
+        out
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    private fun parseEntries(raw: String): List<ScheduleEntry> = try {
+        val arr = JSONArray(raw)
+        val out = mutableListOf<ScheduleEntry>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            out.add(ScheduleEntry.fromJson(o))
+        }
+        out
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    private fun text(o: JSONObject, key: String): String =
+        if (o.isNull(key)) "" else o.optString(key, "").trim()
+
+    /**
+     * First run after updating from the single-schedule version: the
+     * classes saved there become one schedule so nothing is lost, and
+     * the old keys (including the removed to-do list) are cleared.
+     * On a fresh install there is nothing to carry over and the app
+     * simply starts empty.
+     */
+    private fun migrateLegacy(p: SharedPreferences): List<Schedule> {
+        val result = mutableListOf<Schedule>()
+        val legacy = p.getString(LEGACY_SCHEDULE, null)
+        if (legacy != null) {
+            val entries = parseEntries(legacy)
+            if (entries.isNotEmpty()) {
+                val name = (p.getString(LEGACY_SEMESTER, null) ?: "").trim().ifBlank { "My schedule" }
+                val program = (p.getString(LEGACY_PROGRAM, null) ?: "").trim()
+                val note = if (program.startsWith(LEGACY_PROGRAM_PLACEHOLDER)) "" else program
+                result.add(Schedule(newId(), name, note, true, entries))
+            }
+        }
+        p.edit()
+            .putString(KEY_SCHEDULES, toJsonArray(result).toString())
+            .remove(LEGACY_SCHEDULE)
+            .remove(LEGACY_SEMESTER)
+            .remove(LEGACY_PROGRAM)
+            .remove(LEGACY_TODOS)
+            .apply()
+        return result
+    }
 }

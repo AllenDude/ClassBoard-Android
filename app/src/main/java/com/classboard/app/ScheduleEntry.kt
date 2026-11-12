@@ -1,6 +1,7 @@
 package com.classboard.app
 
 import org.json.JSONObject
+import java.util.UUID
 
 /**
  * One class meeting: a single subject on a single day of the week.
@@ -29,14 +30,19 @@ data class ScheduleEntry(
     }
 
     companion object {
+        /** Tolerant of missing or malformed fields, so a hand-edited
+         *  or older backup file can't crash the app. */
         fun fromJson(o: JSONObject): ScheduleEntry = ScheduleEntry(
-            id = o.optString("id", java.util.UUID.randomUUID().toString()),
-            subject = o.optString("subject", ""),
-            room = o.optString("room", ""),
-            teacher = o.optString("teacher", ""),
-            day = o.optInt("day", 1),
-            start = o.optString("start", "08:00"),
-            end = o.optString("end", "09:00")
+            id = text(o, "id").ifBlank { UUID.randomUUID().toString() },
+            subject = text(o, "subject"),
+            room = text(o, "room"),
+            teacher = text(o, "teacher"),
+            day = o.optInt("day", 1).coerceIn(0, 6),
+            start = ScheduleMath.normalizeTime(text(o, "start"), "08:00"),
+            end = ScheduleMath.normalizeTime(text(o, "end"), "09:00")
         )
+
+        private fun text(o: JSONObject, key: String): String =
+            if (o.isNull(key)) "" else o.optString(key, "").trim()
     }
 }
